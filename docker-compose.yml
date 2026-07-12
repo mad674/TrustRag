@@ -1,0 +1,87 @@
+version: '3.8'
+
+services:
+  postgres:
+    image: postgres:15-alpine
+    environment:
+      POSTGRES_USER: trustrag
+      POSTGRES_PASSWORD: trustrag
+      POSTGRES_DB: trustrag
+    ports:
+      - "5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U trustrag -d trustrag"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+    networks:
+      - trustrag-network
+
+  qdrant:
+    image: qdrant/qdrant:latest
+    ports:
+      - "6333:6333"
+    volumes:
+      - qdrant_data:/qdrant/storage
+    environment:
+      QDRANT_API_KEY: trustrag_secret
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:6333/health"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+    networks:
+      - trustrag-network
+
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    ports:
+      - "8000:8000"
+    environment:
+      DATABASE_URL: postgresql://trustrag:trustrag@postgres:5432/trustrag
+      QDRANT_URL: http://qdrant:6333
+      JWT_SECRET: changeme_in_production
+      EMBEDDING_PROVIDER: fallback
+      UPLOAD_DIR: /app/storage/documents
+      LOG_LEVEL: INFO
+    depends_on:
+      postgres:
+        condition: service_healthy
+      qdrant:
+        condition: service_healthy
+    volumes:
+      - ./backend/storage:/app/storage
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/health').read()"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - trustrag-network
+    restart: unless-stopped
+
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    ports:
+      - "3000:3000"
+    environment:
+      VITE_API_BASE_URL: http://localhost:8000
+    depends_on:
+      - backend
+    networks:
+      - trustrag-network
+    restart: unless-stopped
+
+volumes:
+  pgdata:
+  qdrant_data:
+
+networks:
+  trustrag-network:
+    driver: bridge
