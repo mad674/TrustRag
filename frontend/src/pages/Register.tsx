@@ -36,12 +36,10 @@ export const Register = () => {
     <div className="auth-screen">
       <div className="panel auth-card">
         <h1>TrustRAG</h1>
-        <h2>Create account</h2>
-        
+        <h2>Create new account</h>
         {error && (
           <div className="notice error">{error}</div>
         )}
-
         <form onSubmit={handleSubmit} className="form-grid">
           <label className="field">
             <span>Username</span>

@@ -65,8 +65,6 @@ def _chunk_text(text: str, max_chars: int = 1200, overlap: int = 160) -> List[st
             break
         start = max(0, end - overlap)
     return chunks
-
-
 def index_document_content(doc: Document):
     chunks = _chunk_text(doc.content or "")
     if not chunks:
@@ -145,8 +143,6 @@ def list_documents(db: Session = Depends(get_db), current_user=Depends(get_curre
         }
         for doc in docs
     ]
-
-
 @router.get('/{doc_id}')
 def get_document(doc_id: int, db: Session = Depends(get_db), current_user=Depends(get_current_user)):
     doc = db.query(Document).filter(Document.id == doc_id).first()
