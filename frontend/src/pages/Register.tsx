@@ -36,7 +36,7 @@ export const Register = () => {
     <div className="auth-screen">
       <div className="panel auth-card">
         <h1>TrustRAG</h1>
-        <h2>Create new account</h>
+        <h2>Create new account</h2>
         {error && (
           <div className="notice error">{error}</div>
         )}
