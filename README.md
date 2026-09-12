@@ -149,6 +149,13 @@ cd frontend
 npm install
 npm run dev
 ```
+### Backend
+
+```bash
+cd backend
+pip install -r requirements.txt
+python -m uvicorn app.main:app --host 0.0.0.0 --port 8000                                                              
+```
 
 ### Docker
 
@@ -317,6 +324,4 @@ MIT License - See LICENSE file for details
 ---
 
 **Built for trustworthy, explainable retrieval-augmented generation**
-#   T r u s t R a g 
- 
- 
+# TrustRag
