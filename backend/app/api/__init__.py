@@ -4,7 +4,7 @@ api_router = APIRouter()
 
 from . import health, users, auth
 from . import documents
-from . import embeddings, retrieve
+from . import embeddings, retrieve, reports, llm_settings, memory
 from . import adaptive, orchestrate, evaluation
 
 api_router.include_router(health.router)
@@ -16,3 +16,6 @@ api_router.include_router(retrieve.router)
 api_router.include_router(adaptive.router)
 api_router.include_router(orchestrate.router)
 api_router.include_router(evaluation.router)
+api_router.include_router(reports.router)
+api_router.include_router(llm_settings.router)
+api_router.include_router(memory.router)

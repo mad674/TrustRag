@@ -1,223 +1,195 @@
-# TrustRAG - Production-Ready RAG with Multi-Agent Orchestration
+# AdaptiveDocAI
 
-A complete Retrieval-Augmented Generation (RAG) system with:
-- **JWT Authentication** with role-based access control
-- **Document Management** with secure upload and storage
-- **Intelligent Embedding** with caching and provider selection
-- **Hybrid Retrieval** combining BM25 (lexical) + Dense (semantic) search
-- **Multi-Agent Orchestration** using LangGraph for answer generation, verification, and reporting
-- **Production Docker Setup** with PostgreSQL, Qdrant, backend, and frontend
+Adaptive Explainable Multi-Agent Retrieval-Augmented Framework for Intelligent Document Analysis
 
-## Quick Start
+## Research project status
 
-### Prerequisites
-- Docker & Docker Compose (recommended)
-- Python 3.11+ (for local development)
+This repository is being built as a full academic RAG project for adaptive retrieval and trustworthy document analysis. The codebase already contains a working starter prototype, but the implementation is being evolved in staged phases toward the final research architecture described in the project brief.
 
-### Using Docker Compose (Recommended - 1 Command)
-```bash
-cd /path/to/TrustRAG
-docker-compose up -d
-```
+The official project title remains:
 
-Wait 30s for services to start:
-- Frontend: http://localhost:3000
-- API Docs: http://localhost:8000/docs
-- Backend: http://localhost:8000
-- Qdrant: http://localhost:6333
+Adaptive Explainable Multi-Agent Retrieval-Augmented Framework for Intelligent Document Analysis
 
-**Default Admin Credentials:**
-- Username: `admin`
-- Password: `password123`
+Internal name:
 
-### Local Development Setup
-```bash
-# 1. Create database
-psql -U postgres -c "CREATE DATABASE trustrag;"
-psql -U postgres -c "CREATE USER trustrag WITH PASSWORD 'trustrag';"
+AdaptiveDocAI
 
-# 2. Install backend dependencies
-cd backend
-python -m venv venv
-source venv/bin/activate
-pip install -r requirements.txt
+## Core research focus
 
-# 3. Create admin user
-python create_admin.py admin admin@example.com password123
+- Adaptive retrieval selection
+- Multi-agent orchestration
+- Evidence verification
+- Confidence-aware explainability
+- Grounded citation generation
+- Trustworthy document analysis
 
-# 4. Start backend
-python -m uvicorn app.main:app --reload
+This project is not being presented as a generic chatbot with RAG. The research emphasis is on retrieval strategy selection and trustworthy evidence-grounded reasoning.
 
-# 5. In new terminal - Install frontend
-cd frontend
-npm install
-npm run dev
+## Current repository analysis
 
-# 6. Start Qdrant (if not using Docker)
-# Download from https://github.com/qdrant/qdrant
-qdrant --http-port 6333
-```
+### Existing work already present
 
-Access at http://localhost:5173
+- FastAPI backend shell
+- JWT auth and user routes
+- basic document upload API
+- PLANNED retrieval and evaluation endpoints
+- Vite + React frontend shell
+- Docker-oriented config files
+- sample environment configuration
+- partial research-oriented docs and service directories
 
-## Core Features
+### Must still be implemented or hardened
 
-### 1. Authentication & RBAC
-- JWT token-based authentication
-- Secure password hashing with bcrypt
-- Role-based access control (admin/user)
+- PostgreSQL schema for the full research model set
+- strict user isolation across all doc operations
+- real chunking with metadata and page tracking
+- embedding service using BGE-like configuration
+- Qdrant collection lifecycle and document filtering
+- BM25 lexical index with safe rebuilds
+- dense and hybrid retrieval with principled score fusion
+- adaptive router using query features
+- reranking and multi-agent LangGraph flow
+- verification, contradiction handling, and confidence computation
+- dashboard, comparison, summaries, reports, and evaluation pipeline
+- reproducible experiments and real metric exports
 
-### 2. Document Management
-- Secure file upload with validation
-- Automatic document indexing
-- File storage with cleanup
+## Implementation plan
 
-### 3. Adaptive Retrieval
-- **Intent Classification**: Detects query type (QA, Definition, Summary, etc.)
-- **Hybrid Search**: BM25 (lexical) + Dense (Qdrant semantic)
-- **Cross-Encoder Reranking**: Refines results
+### Phase 1: Foundation
 
-### 4. Multi-Agent Pipeline (LangGraph)
-1. **QA Agent** → Generates answer from context
-2. **Citation Agent** → Extracts source documents
-3. **Verification Agent** → Validates answer grounding
-4. **Summary Agent** → Summarizes documents
-5. **Explainability Agent** → Explains reasoning
-6. **Report Agent** → Creates downloadable report
+Completed in this update:
 
-### 5. Embedding Service
-- sentence-transformers (offline, fast)
-- OpenAI API (production-grade)
-- SQLite caching for efficiency
+- repository assessment and truthful project framing
+- environment config alignment for the full academic project
+- documentation update across architecture, setup, methodology, evaluation, API, and deployment
+- validation of the existing frontend build and Python compile baseline
 
-### 6. Evaluation Metrics
-- Precision@K, Recall@K
-- Mean Reciprocal Rank
-- NDCG (Normalized DCG)
-- Hallucination Detection
+### Phase 2: Data and authentication
 
-## API Endpoints
+Planned next:
 
-### Auth
-```bash
-# Register user
-curl -X POST http://localhost:8000/api/users/register \
-  -H "Content-Type: application/json" \
-  -d '{
-    "username": "user1",
-    "email": "user1@example.com",
-    "password": "password123"
-  }'
+- finalize PostgreSQL models and migrations
+- secure JWT auth and role checks
+- document metadata model and user isolation rules
+- upload and validation contracts
 
-# Login
-TOKEN=$(curl -X POST http://localhost:8000/api/auth/token \
-  -H "Content-Type: application/x-www-form-urlencoded" \
-  -d "username=admin&password=password123" | jq -r '.access_token')
+### Phase 3: Retrieval stack
 
-# Get current user
-curl -H "Authorization: Bearer $TOKEN" \
-  http://localhost:8000/api/users/me
-```
+Planned next:
 
-### Documents
-```bash
-# Upload document
-curl -X POST http://localhost:8000/api/documents/upload \
-  -H "Authorization: Bearer $TOKEN" \
-  -F "file=@document.pdf"
+- chunking service with structural/semantic chunk metadata
+- embedding service and Qdrant indexing
+- BM25 implementation
+- dense retrieval
+- hybrid fusion and reranking
 
-# Index document for search
-curl -X POST http://localhost:8000/api/embeddings/index/1 \
-  -H "Authorization: Bearer $TOKEN"
-```
+### Phase 4: Agents and verification
 
-### Retrieval
-```bash
-# Vector search only
-curl -X POST http://localhost:8000/api/retrieve/vector \
-  -H "Authorization: Bearer $TOKEN" \
-  -H "Content-Type: application/json" \
-  -d '{"query": "What is RAG?", "top_k": 10}'
+Planned next:
 
-# Adaptive hybrid retrieval
-curl -X POST http://localhost:8000/api/adaptive/query \
-  -H "Authorization: Bearer $TOKEN" \
-  -H "Content-Type: application/json" \
-  -d '{"query": "Explain RAG", "top_k": 10}'
-```
+- LangGraph orchestrator and agents
+- evidence verification and contradiction detection
+- confidence scoring and explainability
 
-### Full RAG Pipeline (All Agents)
-```bash
-# Complete end-to-end orchestration
-curl -X POST http://localhost:8000/api/orchestrate/query \
-  -H "Authorization: Bearer $TOKEN" \
-  -H "Content-Type: application/json" \
-  -d '{"query": "What is RAG?", "top_k": 10}'
-```
+### Phase 5: UI and evaluation
 
-Interactive API docs: http://localhost:8000/docs
+Planned next:
 
-## Configuration
+- chat, dashboard, comparison, report generation, and evaluation runner
+- results export and plotting
+- ablation studies and experiment reproducibility
 
-### Environment Variables (.env)
-```env
-# Database
-DATABASE_URL=postgresql://trustrag:trustrag@localhost:5432/trustrag
+## Project structure
 
-# Vector Database
-QDRANT_URL=http://localhost:6333
-
-# JWT Secret (change in production!)
-JWT_SECRET=your-secret-key-here
-
-# Embedding Provider
-EMBEDDING_PROVIDER=sentence-transformers  # Options: sentence-transformers, openai, fallback
-OPENAI_API_KEY=sk-...  # Only if using OpenAI
-EMBEDDING_BATCH_SIZE=32
-
-# File Storage
-UPLOAD_DIR=./storage/documents
-
-# Logging
-LOG_LEVEL=INFO
-```
-
-## Project Structure
-
-```
+```text
 TrustRAG/
 ├── backend/
 │   ├── app/
-│   │   ├── main.py                    # FastAPI app
-│   │   ├── auth.py                    # JWT auth
-│   │   ├── config.py                  # Settings
-│   │   ├── models.py                  # DB models
-│   │   ├── db.py                      # Database
-│   │   ├── api/
-│   │   │   ├── auth.py                # /api/auth
-│   │   │   ├── users.py               # /api/users
-│   │   │   ├── documents.py           # /api/documents
-│   │   │   ├── embeddings.py          # /api/embeddings
-│   │   │   ├── retrieve.py            # /api/retrieve
-│   │   │   ├── adaptive.py            # /api/adaptive
-│   │   │   └── orchestrate.py         # /api/orchestrate (full RAG)
 │   ├── services/
-│   │   ├── embedding_service/         # Embeddings with caching
-│   │   ├── adaptive_retrieval/        # BM25 + dense + rerank
-│   │   ├── langgraph/                 # Multi-agent orchestration
-│   │   │   ├── state.py               # State definition
-│   │   │   ├── agents.py              # Agent implementations
-│   │   │   └── orchestrator.py        # StateGraph coordinator
-│   │   └── evaluation/                # Evaluation metrics
-│   ├── create_admin.py                # Create admin user
+│   ├── tests/
 │   ├── requirements.txt
 │   └── Dockerfile
 ├── frontend/
 │   ├── src/
-│   │   ├── pages/
-│   │   │   ├── Login.tsx              # Login
-│   │   │   ├── Register.tsx           # Register
-│   │   │   ├── Dashboard.tsx          # Doc library
+│   ├── package.json
+│   └── vite.config.ts
+├── docs/
+│   ├── architecture.md
+│   ├── api.md
+│   ├── setup.md
+│   ├── research_methodology.md
+│   ├── evaluation.md
+│   └── deployment.md
+├── evaluation/
+├── .env.example
+├── docker-compose.yml
+├── README.md
+└── startup.py
+```
+
+## Setup
+
+### Backend
+
+```bash
+cd backend
+python -m venv .venv
+# Windows
+.venv\Scripts\activate
+# macOS/Linux
+source .venv/bin/activate
+pip install -r requirements.txt
+uvicorn app.main:app --reload
+```
+
+### Frontend
+
+```bash
+cd frontend
+npm install
+npm run dev
+```
+
+### Docker
+
+```bash
+docker compose up --build
+```
+
+## Environment variables
+
+Use the project-root `.env` file derived from `.env.example` and configure values for:
+
+- DATABASE_URL
+- QDRANT_URL
+- JWT_SECRET
+- LLM_PROVIDER
+- OPENAI_API_KEY
+- GEMINI_API_KEY
+- EMBEDDING_MODEL
+- RERANKER_MODEL
+- CORS_ORIGINS
+
+## Important constraints
+
+- Do not commit secret values.
+- Do not fabricate experimental results.
+- Do not fabricate citations or page numbers.
+- Use evidence-grounded answers only.
+- Keep user document isolation as a mandatory requirement.
+
+## Validation status
+
+The current repository has been checked for the baseline health needed to continue:
+
+- Python compilation of the backend package succeeded.
+- Frontend production build succeeded with Vite.
+
+This confirms the foundation is at least runnable and import-safe before deeper research implementation begins.
+
+## Future work
+
+The next major milestone is the complete data/auth foundation and retrieval pipeline, followed by the LangGraph orchestrator and verification system. The project will continue in phases to keep the stack correct, testable, and academically defensible.
 │   │   │   ├── Chat.tsx               # Query interface
 │   │   │   └── Upload.tsx             # Upload
 │   │   ├── api/client.ts              # API client
@@ -345,5 +317,6 @@ MIT License - See LICENSE file for details
 ---
 
 **Built for trustworthy, explainable retrieval-augmented generation**
-#   T r u s t R a g  
+#   T r u s t R a g 
+ 
  

@@ -4,9 +4,17 @@ LangGraph orchestrator for TrustRAG - coordinates multi-agent workflow
 from typing import Optional, List, Dict, Any
 from .state import QueryState
 from .agents import (
-    QAAgent, SummaryAgent, CitationAgent, 
-    VerificationAgent, ExplainabilityAgent, ReportAgent
+    QAAgent, SummaryAgent, ComparisonAgent, CitationAgent,
+    VerificationAgent, ExplainabilityAgent, ReportAgent,
+    TaskRouterAgent, ClaimExtractionAgent, CorrectionSearchAgent,
 )
+
+try:
+    from langgraph.graph import END, START, StateGraph
+except ImportError:
+    StateGraph = None
+    START = "__start__"
+    END = "__end__"
 
 
 class TrustRAGOrchestrator:
@@ -23,10 +31,51 @@ class TrustRAGOrchestrator:
     def __init__(self, openai_api_key: Optional[str] = None):
         self.qa_agent = QAAgent(openai_api_key)
         self.summary_agent = SummaryAgent()
+        self.comparison_agent = ComparisonAgent()
+        self.task_router = TaskRouterAgent()
+        self.claim_extractor = ClaimExtractionAgent()
+        self.correction_search = CorrectionSearchAgent()
         self.citation_agent = CitationAgent()
         self.verification_agent = VerificationAgent()
         self.explainability_agent = ExplainabilityAgent()
         self.report_agent = ReportAgent()
+        self.graph = self._build_graph() if StateGraph is not None else None
+
+    def _build_graph(self):
+        graph = StateGraph(QueryState)
+        graph.add_node("task_router", self.task_router.process)
+        graph.add_node("qa", self.qa_agent.process)
+        graph.add_node("summary", self.summary_agent.process)
+        graph.add_node("comparison", self.comparison_agent.process)
+        graph.add_node("claims", self.claim_extractor.process)
+        graph.add_node("citation", self.citation_agent.process)
+        graph.add_node("verification", self.verification_agent.process)
+        graph.add_node("correction_search", self.correction_search.process)
+        graph.add_node("explainability", self.explainability_agent.process)
+        graph.add_node("report", self.report_agent.process)
+        graph.add_edge(START, "task_router")
+        graph.add_conditional_edges("task_router", lambda state: state.get("task", "qa"), {
+            "qa": "qa", "summary": "summary", "comparison": "comparison",
+        })
+        graph.add_edge("qa", "claims")
+        graph.add_edge("summary", "claims")
+        graph.add_edge("comparison", "claims")
+        graph.add_edge("claims", "citation")
+        graph.add_edge("citation", "verification")
+        graph.add_conditional_edges("verification", self._verification_route, {
+            "correction_search": "correction_search", "explainability": "explainability",
+        })
+        graph.add_edge("correction_search", "qa")
+        graph.add_edge("explainability", "report")
+        graph.add_edge("report", END)
+        return graph.compile()
+
+    @staticmethod
+    def _verification_route(state: QueryState) -> str:
+        verification = state.get("verification_results") or {}
+        if verification.get("needs_correction_search") and state.get("refinement_iterations", 0) < 1:
+            return "correction_search"
+        return "explainability"
     
     def process(self, state: QueryState) -> QueryState:
         """
@@ -37,16 +86,19 @@ class TrustRAGOrchestrator:
             state["explanations"] = []
         if "metadata" not in state:
             state["metadata"] = {}
+        state.setdefault("claims", [])
+        state.setdefault("refinement_iterations", 0)
+        state.setdefault("correction_performed", False)
+        state.setdefault("llm_provider", "fallback")
         
-        # Execute agents in sequence
+        if self.graph is not None:
+            return self.graph.invoke(state)
         state = self.qa_agent.process(state)
         state = self.citation_agent.process(state)
         state = self.verification_agent.process(state)
         state = self.summary_agent.process(state)
         state = self.explainability_agent.process(state)
-        state = self.report_agent.process(state)
-        
-        return state
+        return self.report_agent.process(state)
     
     async def process_async(self, state: QueryState) -> QueryState:
         """

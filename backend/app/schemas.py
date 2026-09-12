@@ -1,5 +1,6 @@
-from pydantic import BaseModel
-from typing import Optional
+from uuid import UUID
+
+from pydantic import BaseModel, ConfigDict
 
 
 class UserCreate(BaseModel):
@@ -9,13 +10,12 @@ class UserCreate(BaseModel):
 
 
 class UserOut(BaseModel):
-    id: int
+    model_config = ConfigDict(from_attributes=True)
+
+    id: UUID
     username: str
     email: str
     role: str
-
-    class Config:
-        from_attributes = True
 
 
 class Token(BaseModel):
@@ -24,5 +24,5 @@ class Token(BaseModel):
 
 
 class TokenData(BaseModel):
-    username: Optional[str] = None
-    role: Optional[str] = None
+    username: str | None = None
+    role: str | None = None

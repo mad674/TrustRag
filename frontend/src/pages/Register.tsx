@@ -34,9 +34,10 @@ export const Register = () => {
 
   return (
     <div className="auth-screen">
+      <div className="auth-visual"><span className="eyebrow">A CLEARER WAY TO RESEARCH</span><h1>Your corpus.<br /><em>Your evidence.</em></h1><p>Build a focused workspace for the documents that matter, then let every answer show its work.</p><div className="visual-orbit"><span>PDF</span><span>BM25</span><span>AI</span><span>QA</span></div></div>
       <div className="panel auth-card">
-        <h1>TrustRAG</h1>
-        <h2>Create new account</h2>
+        <div className="auth-brand"><span className="brand-mark">T</span><strong>TrustRAG</strong></div>
+        <span className="eyebrow">GET STARTED</span><h2>Create your workspace</h2><p className="muted">A private home for your documents and research questions.</p>
         {error && (
           <div className="notice error">{error}</div>
         )}
@@ -81,20 +82,13 @@ export const Register = () => {
             />
           </label>
 
-          <button
-            type="submit"
-            disabled={loading}
-            className="primary"
-          >
+          <button type="submit" disabled={loading} className="primary full-button">
             {loading ? 'Creating account...' : 'Register'}
           </button>
         </form>
 
         <p className="muted auth-switch">
-          Already have an account?{' '}
-          <a href="/login">
-            Sign in
-          </a>
+          Already have an account? <a href="/login">Sign in</a>
         </p>
       </div>
     </div>

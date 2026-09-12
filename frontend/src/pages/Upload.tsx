@@ -6,10 +6,13 @@ export default function Upload() {
   const [message, setMessage] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
+  const [uploading, setUploading] = useState(false);
+  const stages = ['Validate file', 'Parse document', 'Clean and chunk text', 'Generate embeddings', 'Index evidence'];
 
   const submit = async () => {
     if (!file) return;
     setLoading(true);
+    setUploading(true);
     setError('');
     setMessage('');
     try {
@@ -22,6 +25,7 @@ export default function Upload() {
       setError(err.response?.data?.detail || 'Upload failed');
     } finally {
       setLoading(false);
+      setUploading(false);
     }
   };
 
@@ -56,8 +60,8 @@ export default function Upload() {
       <aside className="panel card">
         <h3>Pipeline</h3>
         <div className="list">
-          {['Parse text', 'Clean and normalize', 'Adaptive semantic chunking', 'Embedding generation', 'Hybrid retrieval refresh'].map((step) => (
-            <div className="list-item" key={step}>{step}</div>
+          {stages.map((step, index) => (
+            <div className={`list-item pipeline-step ${uploading ? 'pipeline-step-active' : ''}`} style={{ animationDelay: `${index * 180}ms` }} key={step}><span className="step-index">{index + 1}</span><span>{step}</span><span className="step-state">{uploading ? 'processing' : message ? 'complete' : 'ready'}</span></div>
           ))}
         </div>
       </aside>

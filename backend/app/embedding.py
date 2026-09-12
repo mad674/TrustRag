@@ -3,11 +3,6 @@ import hashlib
 import os
 import re
 import numpy as np
-try:
-    from sentence_transformers import SentenceTransformer
-except Exception:
-    SentenceTransformer = None
-
 _embedder = None
 VECTOR_SIZE = 384
 
@@ -16,7 +11,9 @@ def get_embedder(model_name: str = "all-MiniLM-L6-v2"):
     if os.getenv("USE_SENTENCE_TRANSFORMERS", "false").lower() != "true":
         return None
     if _embedder is None:
-        if SentenceTransformer is None:
+        try:
+            from sentence_transformers import SentenceTransformer
+        except Exception:
             _embedder = None
         else:
             _embedder = SentenceTransformer(model_name)

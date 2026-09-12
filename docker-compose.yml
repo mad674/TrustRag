@@ -35,6 +35,20 @@ services:
     networks:
       - trustrag-network
 
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+    networks:
+      - trustrag-network
+
   backend:
     build:
       context: ./backend
@@ -44,6 +58,7 @@ services:
     environment:
       DATABASE_URL: postgresql://trustrag:trustrag@postgres:5432/trustrag
       QDRANT_URL: http://qdrant:6333
+      REDIS_URL: redis://redis:6379/0
       JWT_SECRET: changeme_in_production
       EMBEDDING_PROVIDER: fallback
       UPLOAD_DIR: /app/storage/documents
@@ -52,6 +67,8 @@ services:
       postgres:
         condition: service_healthy
       qdrant:
+        condition: service_healthy
+      redis:
         condition: service_healthy
     volumes:
       - ./backend/storage:/app/storage
@@ -81,6 +98,7 @@ services:
 volumes:
   pgdata:
   qdrant_data:
+  redis_data:
 
 networks:
   trustrag-network:

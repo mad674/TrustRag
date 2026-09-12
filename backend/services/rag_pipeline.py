@@ -60,6 +60,7 @@ class EvidenceVerifier:
         if not contexts:
             return {
                 "is_grounded": False,
+                "verification_status": "UNSUPPORTED",
                 "evidence_score": 0.0,
                 "hallucination_score": 1.0,
                 "hallucination_risk": "high",
@@ -90,6 +91,7 @@ class EvidenceVerifier:
 
         return {
             "is_grounded": evidence_score >= 0.35,
+            "verification_status": "SUPPORTED" if evidence_score >= 0.35 else "PARTIALLY_SUPPORTED",
             "evidence_score": round(evidence_score, 4),
             "confidence": round(confidence, 4),
             "hallucination_score": round(hallucination_score, 4),
@@ -105,15 +107,15 @@ class TrustRAGPipeline:
         self.generator = AnswerGenerator()
         self.verifier = EvidenceVerifier()
 
-    def run(self, query: str, top_k: int = 5, mode: str = "adaptive") -> Dict:
+    def run(self, query: str, top_k: int = 5, mode: str = "adaptive", owner_id: Optional[str] = None) -> Dict:
         if mode == "baseline":
-            retrieval = self.retrieval.baseline_query(query, top_k=top_k)
+            retrieval = self.retrieval.baseline_query(query, top_k=top_k, owner_id=owner_id)
         elif mode == "hybrid":
-            retrieval = self.retrieval.hybrid_query(query, top_k=top_k, rerank=False)
+            retrieval = self.retrieval.hybrid_query(query, top_k=top_k, rerank=False, owner_id=owner_id)
         elif mode == "hybrid_rerank":
-            retrieval = self.retrieval.hybrid_query(query, top_k=top_k, rerank=True)
+            retrieval = self.retrieval.hybrid_query(query, top_k=top_k, rerank=True, owner_id=owner_id)
         else:
-            retrieval = self.retrieval.query(query, top_k=top_k)
+            retrieval = self.retrieval.query(query, top_k=top_k, owner_id=owner_id)
 
         contexts = retrieval.get("results", [])
         answer = self.generator.generate(query, contexts, retrieval.get("intent"))
@@ -142,6 +144,14 @@ class TrustRAGPipeline:
         ]
 
         report = self._report(query, answer, retrieval, verification, sources)
+        pipeline_trace = [
+            {"stage": "query_analysis", "status": "completed", "detail": f"Classified as {retrieval.get('intent', 'unknown')}"},
+            {"stage": "adaptive_retrieval", "status": "completed", "detail": f"Selected {retrieval.get('strategy', 'unknown')}"},
+            {"stage": "reranking", "status": "completed", "detail": "Cross-encoder/fallback reranker applied" if retrieval.get("reranker_used") else "Not selected for this strategy"},
+            {"stage": "agent_orchestration", "status": "completed", "detail": "Grounded response assembled by the agent workflow"},
+            {"stage": "evidence_verification", "status": "completed", "detail": verification.get("verification_status", "UNSUPPORTED")},
+            {"stage": "explainability", "status": "completed", "detail": f"{len(sources)} source citation(s) attached"},
+        ]
         return {
             "query": query,
             "mode": mode,
@@ -154,6 +164,7 @@ class TrustRAGPipeline:
             "supporting_chunks": contexts,
             "confidence": confidence,
             "verification": verification,
+            "pipeline_trace": pipeline_trace,
             "explanations": explanations,
             "report": report,
         }

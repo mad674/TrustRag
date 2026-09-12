@@ -104,6 +104,22 @@ class LocalQdrantClient:
         hits.sort(key=lambda item: item.score, reverse=True)
         return hits[:limit]
 
+    def delete_document(self, collection_name: str, doc_id: str):
+        conn = _connect()
+        rows = conn.execute(
+            'SELECT item_id, payload_json FROM vectors WHERE collection = ?',
+            (collection_name,),
+        ).fetchall()
+        for row in rows:
+            payload = json.loads(row['payload_json']) if row['payload_json'] else {}
+            if str(payload.get('doc_id')) == str(doc_id):
+                conn.execute(
+                    'DELETE FROM vectors WHERE collection = ? AND item_id = ?',
+                    (collection_name, row['item_id']),
+                )
+        conn.commit()
+        conn.close()
+
 
 def get_qdrant_client():
     # Use local storage by default so the project runs without external Qdrant.

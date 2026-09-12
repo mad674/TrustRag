@@ -13,6 +13,12 @@ interface Message {
   explanations: string[];
   verification?: Record<string, any>;
   report: string;
+  pipelineTrace: { stage: string; status: string; detail: string }[];
+  task?: string;
+  llmProvider: string;
+  correctionPerformed: boolean;
+  claims: { claim: string; status: string; confidence: number }[];
+  rerankingExplanation: string;
   timestamp: Date;
 }
 
@@ -43,6 +49,12 @@ export const Chat = () => {
         explanations: response.data.explanations || [],
         verification: response.data.verification,
         report: response.data.report || '',
+        pipelineTrace: response.data.pipeline_trace || [],
+        task: response.data.task,
+        llmProvider: response.data.llm_provider || 'fallback:local',
+        correctionPerformed: Boolean(response.data.correction_performed),
+        claims: response.data.claims || [],
+        rerankingExplanation: response.data.reranking_explanation || '',
         timestamp: new Date(),
       };
 
@@ -60,8 +72,9 @@ export const Chat = () => {
       <section className="panel card chat-panel">
         <div className="section-title">
           <div>
-            <span className="badge">Multi-Agent RAG</span>
+            <span className="eyebrow">LANGGRAPH WORKSPACE</span>
             <h2>Ask your corpus</h2>
+            <p className="muted chat-intro">Every answer runs through retrieval, an agent task, claim extraction, evidence verification, and explainability.</p>
           </div>
         </div>
 
@@ -87,6 +100,13 @@ export const Chat = () => {
           </div>
         )}
 
+        {loading && (
+          <div className="pipeline-live" aria-live="polite">
+            <strong>TrustRAG is processing your query</strong>
+            <span>Analyzing query, selecting retrieval, verifying evidence, and preparing explanation...</span>
+          </div>
+        )}
+
         <div className="conversation">
           {messages.map((message) => (
             <article key={message.id} className="answer-block">
@@ -98,10 +118,22 @@ export const Chat = () => {
                 <span>Intent: {message.intent || 'unknown'}</span>
                 <span>Strategy: {message.retrievalStrategy || 'unknown'}</span>
                 <span>Reranker: {message.rerankerUsed ? 'on' : 'off'}</span>
+                <span>Verification: {message.verification?.verification_status || 'unknown'}</span>
+                <span>Agent: {message.task || 'qa'}</span>
               </div>
               <pre className="answer-text">{message.answer}</pre>
 
               <div className="result-grid">
+                <div className="evidence-panel ai-panel">
+                  <h3>AI execution</h3>
+                  <p><strong>Provider:</strong> {message.llmProvider}</p>
+                  <p><strong>Selected agent:</strong> {(message.task || 'qa').toUpperCase()}</p>
+                  <p><strong>Correction search:</strong> {message.correctionPerformed ? 'performed' : 'not required'}</p>
+                  <p><strong>Why this ranking:</strong> {message.rerankingExplanation}</p>
+                  <div className="claim-list">
+                    {message.claims.map((claim, index) => <div className={`claim claim-${claim.status.toLowerCase()}`} key={`${claim.claim}-${index}`}><strong>{claim.status}</strong><span>{claim.claim}</span><small>{(claim.confidence * 100).toFixed(0)}% claim confidence</small></div>)}
+                  </div>
+                </div>
                 <div className="evidence-panel">
                   <h3>Verification</h3>
                   <div className="confidence-bar">
@@ -112,6 +144,17 @@ export const Chat = () => {
                     {message.verification?.hallucination_risk ? ` | Risk: ${message.verification.hallucination_risk}` : ''}
                     {message.verification?.evidence_score !== undefined ? ` | Evidence: ${(message.verification.evidence_score * 100).toFixed(1)}%` : ''}
                   </p>
+                </div>
+                <div className="evidence-panel">
+                  <h3>Pipeline trace</h3>
+                  <div className="trace-list">
+                    {message.pipelineTrace.map((step) => (
+                      <div className="trace-item" key={step.stage}>
+                        <span className="trace-dot" />
+                        <div><strong>{step.stage.replaceAll('_', ' ')}</strong><small>{step.detail}</small></div>
+                      </div>
+                    ))}
+                  </div>
                 </div>
 
                 <div className="evidence-panel">

@@ -29,9 +29,10 @@ export const Login = () => {
 
   return (
     <div className="auth-screen">
+      <div className="auth-visual"><span className="eyebrow">ADAPTIVE DOCUMENT INTELLIGENCE</span><h1>Read deeper.<br /><em>Trust what you find.</em></h1><p>Turn scattered papers and reports into clear, cited answers with retrieval you can inspect.</p><div className="trust-points"><span>01 <strong>Private by design</strong></span><span>02 <strong>Evidence, not guesses</strong></span><span>03 <strong>Research-ready outputs</strong></span></div></div>
       <div className="panel auth-card">
-        <h1>TrustRAG</h1>
-        <h2>Sign in</h2>
+        <div className="auth-brand"><span className="brand-mark">T</span><strong>TrustRAG</strong></div>
+        <span className="eyebrow">WELCOME BACK</span><h2>Continue your research</h2><p className="muted">Sign in to your private evidence workspace.</p>
         
         {error && (
           <div className="notice error">{error}</div>
@@ -58,20 +59,13 @@ export const Login = () => {
             />
           </label>
 
-          <button
-            type="submit"
-            disabled={loading}
-            className="primary"
-          >
+          <button type="submit" disabled={loading} className="primary full-button">
             {loading ? 'Signing in...' : 'Sign In'}
           </button>
         </form>
 
         <p className="muted auth-switch">
-          Don't have an account?{' '}
-          <a href="/register">
-            Register here
-          </a>
+          New to TrustRAG? <a href="/register">Create an account</a>
         </p>
       </div>
     </div>

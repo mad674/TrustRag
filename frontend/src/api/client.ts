@@ -38,8 +38,17 @@ export const documents = {
       headers: { 'Content-Type': 'multipart/form-data' },
     });
   },
-  index: (docId: number) => apiClient.post(`/api/embeddings/index/${docId}`),
-  list: () => apiClient.get('/api/documents'),
+  index: (docId: string) => apiClient.post(`/api/embeddings/index/${docId}`),
+  list: (search?: string, page = 1, pageSize = 12) =>
+    apiClient.get('/api/documents', {
+      params: { ...(search ? { search } : {}), page, page_size: pageSize },
+    }),
+  get: (id: string) => apiClient.get(`/api/documents/${id}`),
+  remove: (id: string) => apiClient.delete(`/api/documents/${id}`),
+  summarize: (id: string, mode: 'short' | 'executive' | 'detailed' = 'executive') =>
+    apiClient.post(`/api/documents/${id}/summarize`, null, { params: { mode } }),
+  compare: (ids: string[], query: string) =>
+    apiClient.post('/api/documents/compare', ids, { params: { query } }),
 };
 
 // Retrieval endpoints
@@ -60,8 +69,24 @@ export const orchestration = {
     apiClient.post('/api/orchestrate/query', { query, top_k: topK }),
 };
 
+export const reports = {
+  generate: (query: string, topK: number = 5, instructions?: string) =>
+    apiClient.post('/api/reports/generate', { query, top_k: topK, instructions }, { responseType: 'blob' }),
+};
+
+export const llmSettings = {
+  get: () => apiClient.get('/api/settings/llm'),
+  validate: (payload: { provider: string; model: string; base_url?: string; api_key?: string; temperature: number; max_tokens: number }) =>
+    apiClient.post('/api/settings/llm/validate', payload),
+};
+
+export const memory = {
+  get: () => apiClient.get('/api/memory'),
+  history: () => apiClient.get('/api/memory/history'),
+};
+
 export const evaluation = {
-  compare: (query: string, topK: number = 10, relevantDocIds: number[] = []) =>
+  compare: (query: string, topK: number = 10, relevantDocIds: string[] = []) =>
     apiClient.post('/api/evaluation/compare', {
       query,
       top_k: topK,

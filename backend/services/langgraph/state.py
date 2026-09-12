@@ -17,3 +17,8 @@ class QueryState(TypedDict):
     verification_results: Optional[dict]
     report: Optional[str]
     metadata: dict
+    task: Optional[str]
+    claims: List[dict]
+    refinement_iterations: int
+    correction_performed: bool
+    llm_provider: str
