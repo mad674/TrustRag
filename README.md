@@ -136,10 +136,8 @@ cd backend
 python -m venv .venv
 # Windows
 .venv\Scripts\activate
-# macOS/Linux
-source .venv/bin/activate
 pip install -r requirements.txt
-uvicorn app.main:app --reload
+python -m uvicorn app.main:app --host 0.0.0.0 --port 8000   
 ```
 
 ### Frontend
@@ -148,13 +146,6 @@ uvicorn app.main:app --reload
 cd frontend
 npm install
 npm run dev
-```
-### Backend
-
-```bash
-cd backend
-pip install -r requirements.txt
-python -m uvicorn app.main:app --host 0.0.0.0 --port 8000                                                              
 ```
 
 ### Docker
