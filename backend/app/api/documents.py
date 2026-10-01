@@ -3,6 +3,7 @@ from sqlalchemy.orm import Session
 import os
 import re
 import uuid
+import hashlib
 from typing import List
 from ..api.deps import get_db
 from ..models_document import Document
@@ -38,13 +39,9 @@ def _chunk_text(text: str, max_chars: int = 1200, overlap: int = 160) -> List[st
 
 
 def _vector_item_id(doc_id) -> int:
-    """Convert a UUID-backed document id into a stable SQLite-safe integer vector key."""
-    raw = getattr(doc_id, "bytes", None)
-    if raw is None:
-        raw = str(doc_id).encode("utf-8")
-    if isinstance(raw, (bytes, bytearray)):
-        return int.from_bytes(raw[:8], byteorder="big", signed=False) % (2 ** 63 - 1)
-    return abs(hash(str(doc_id))) % (2 ** 63 - 1)
+    """Create a stable positive point-id namespace for one document."""
+    digest = hashlib.sha256(str(doc_id).encode("utf-8")).digest()
+    return int.from_bytes(digest[:8], byteorder="big", signed=False) % (2 ** 63 - 1)
 
 
 def index_document_content(doc: Document):

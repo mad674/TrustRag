@@ -20,6 +20,8 @@ interface Message {
   correctionPerformed: boolean;
   claims: { claim: string; status: string; confidence: number; evidence_ids?: number[] }[];
   rerankingExplanation: string;
+  toolCalls: any[];
+  agentDecisions: any[];
   timestamp: Date;
 }
 
@@ -30,6 +32,9 @@ export const Chat = () => {
   const [error, setError] = useState('');
   const [availableDocuments, setAvailableDocuments] = useState<any[]>([]);
   const [selectedDocumentIds, setSelectedDocumentIds] = useState<string[]>([]);
+  const [topK, setTopK] = useState(8);
+  const [copiedId, setCopiedId] = useState<string | null>(null);
+  const [researchMode, setResearchMode] = useState('auto');
     const [searchParams] = useSearchParams();
 
     useEffect(() => {
@@ -56,6 +61,8 @@ export const Chat = () => {
           correctionPerformed: Boolean(saved.correction_performed),
           claims: saved.claims || [],
           rerankingExplanation: saved.reranking_explanation || '',
+          toolCalls: saved.tool_calls || [],
+          agentDecisions: saved.agent_decisions || [],
           timestamp: new Date(record.created_at),
         }]);
       }).catch((err: any) => setError(err.response?.data?.detail || 'Could not load saved analysis'));
@@ -76,7 +83,7 @@ export const Chat = () => {
     setError('');
 
     try {
-      const response = await orchestration.query(query, 8, selectedDocumentIds);
+      const response = await orchestration.query(query, topK, selectedDocumentIds, researchMode);
       const message: Message = {
         id: Date.now().toString(),
         query,
@@ -95,6 +102,8 @@ export const Chat = () => {
         correctionPerformed: Boolean(response.data.correction_performed),
         claims: response.data.claims || [],
         rerankingExplanation: response.data.reranking_explanation || '',
+        toolCalls: response.data.tool_calls || [],
+        agentDecisions: response.data.agent_decisions || [],
         timestamp: new Date(),
       };
 
@@ -107,6 +116,25 @@ export const Chat = () => {
     }
   };
 
+  const copyAnswer = async (message: Message) => {
+    await navigator.clipboard.writeText(message.answer);
+    setCopiedId(message.id);
+    window.setTimeout(() => setCopiedId(null), 1800);
+  };
+
+  const rerun = (message: Message) => {
+    setQuery(message.query);
+    setResearchMode(message.intent || 'auto');
+    setError('');
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  };
+
+  const prompts = [
+    'Summarize the main findings and cite the supporting passages.',
+    'What contradictions or unresolved gaps appear in the evidence?',
+    'Compare the strongest arguments across the selected documents.',
+  ];
+
   return (
     <main className="chat-layout">
       <section className="panel card chat-panel">
@@ -116,6 +144,13 @@ export const Chat = () => {
             <h2>Ask your corpus</h2>
             <p className="muted chat-intro">Every answer runs through retrieval, an agent task, claim extraction, evidence verification, and explainability.</p>
           </div>
+          <button className="secondary compact" type="button" onClick={() => setMessages([])} disabled={!messages.length}>Clear session</button>
+        </div>
+
+        <div className="chat-tools">
+          <label className="mode-select"><span>Research mode</span><select value={researchMode} onChange={(event) => setResearchMode(event.target.value)}><option value="auto">Auto detect</option><option value="qa">Question answering</option><option value="definition">Definition</option><option value="summarization">Summarization</option><option value="comparison">Comparison</option><option value="citation">Citations</option><option value="research_gap">Research gaps</option></select></label>
+          <span className="tool-label">Research prompts</span>
+          {prompts.map((prompt) => <button className="prompt-chip" type="button" key={prompt} onClick={() => setQuery(prompt)}>{prompt}</button>)}
         </div>
 
         <form onSubmit={handleSubmit} className="query-form">
@@ -130,6 +165,11 @@ export const Chat = () => {
             {loading ? 'Reasoning...' : 'Run TrustRAG'}
           </button>
         </form>
+
+        <div className="query-options">
+          <label className="field compact-field"><span>Evidence passages: {topK}</span><input type="range" min="3" max="20" value={topK} onChange={(event) => setTopK(Number(event.target.value))} /></label>
+          <span className="scope-summary">{selectedDocumentIds.length ? `${selectedDocumentIds.length} document${selectedDocumentIds.length === 1 ? '' : 's'} selected` : 'Searching your full library'}</span>
+        </div>
 
         {availableDocuments.length > 0 && <div className="field evidence-picker"><span>Evidence scope</span><div className="doc-picker">{availableDocuments.map((doc) => <label className={`picker-item ${selectedDocumentIds.includes(doc.id) ? 'selected' : ''}`} key={doc.id}><input type="checkbox" checked={selectedDocumentIds.includes(doc.id)} onChange={() => setSelectedDocumentIds((current) => current.includes(doc.id) ? current.filter((id) => id !== doc.id) : [...current, doc.id])} /><span><strong>{doc.title}</strong><small>{doc.chunk_count || 0} indexed chunks</small></span></label>)}</div><small className="muted">Leave empty to search your full private library.</small></div>}
 
@@ -155,7 +195,7 @@ export const Chat = () => {
             <article key={message.id} className="answer-block">
               <div className="question-row">
                 <span>{message.timestamp.toLocaleTimeString()}</span>
-                <strong>{message.query}</strong>
+                <div className="question-actions"><strong>{message.query}</strong><span className="question-buttons"><button className="text-button" type="button" onClick={() => rerun(message)}>Run again</button><button className="text-button" type="button" onClick={() => copyAnswer(message)}>{copiedId === message.id ? 'Copied' : 'Copy answer'}</button></span></div>
               </div>
               <div className="strategy-row">
                 <span>Intent: {message.intent || 'unknown'}</span>
@@ -173,6 +213,8 @@ export const Chat = () => {
                   <p><strong>Selected agent:</strong> {(message.task || 'qa').toUpperCase()}</p>
                   <p><strong>Correction search:</strong> {message.correctionPerformed ? 'performed' : 'not required'}</p>
                   <p><strong>Why this ranking:</strong> {message.rerankingExplanation}</p>
+                  <p><strong>Supervisor:</strong> {message.agentDecisions[0]?.reason || 'Workflow completed with the selected task.'}</p>
+                  <div className="tool-trace">{message.toolCalls.map((call, index) => <span key={`${call.tool}-${index}`}>{call.tool}: {call.action}</span>)}</div>
                   <div className="claim-list">
                     {message.claims.map((claim, index) => <div className={`claim claim-${claim.status.toLowerCase()}`} key={`${claim.claim}-${index}`}><strong>{claim.status}</strong><span>{claim.claim}</span><small>{(claim.confidence * 100).toFixed(0)}% claim confidence{claim.evidence_ids?.length ? ` · evidence ${claim.evidence_ids.map((id) => `[${id}]`).join(', ')}` : ''}</small></div>)}
                   </div>

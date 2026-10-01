@@ -12,8 +12,8 @@ router = APIRouter(prefix="/embeddings", tags=["embeddings"])
 
 @router.post('/index/{doc_id}')
 def index_document(doc_id: uuid.UUID, db: Session = Depends(get_db), current_user=Depends(get_current_user)):
-    doc = db.query(Document).filter(Document.id == doc_id).first()
-    if not doc or (doc.uploaded_by not in {None, current_user.id}):
+    doc = db.query(Document).filter(Document.id == doc_id, Document.uploaded_by == current_user.id).first()
+    if not doc:
         raise HTTPException(status_code=404, detail='Document not found')
     doc.processing_status = "processing"
     db.commit()

@@ -49,6 +49,12 @@ class UserMemoryService:
                 "explanations": response.get("explanations", []),
                 "pipeline_trace": response.get("pipeline_trace", []),
                 "report": response.get("report", ""),
+                "tool_calls": response.get("tool_calls", []),
+                "agent_decisions": response.get("agent_decisions", []),
+                "task": response.get("task"),
+                "llm_provider": response.get("llm_provider"),
+                "reranking_explanation": response.get("reranking_explanation", ""),
+                "correction_performed": response.get("correction_performed", False),
             },
         ))
         db.commit()

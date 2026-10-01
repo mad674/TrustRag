@@ -41,16 +41,21 @@ class AnswerGenerator:
                 f"{_clip(evidence, 1000)}"
             )
 
-        evidence_lines = []
-        for index, item in enumerate(contexts[:4], 1):
-            title = item.get("title") or f"Document {item.get('doc_id', index)}"
-            evidence_lines.append(f"[{index}] {title}: {_clip(item.get('text', ''))}")
-
-        return (
-            f"Answer for: {query}\n\n"
-            + "\n\n".join(evidence_lines)
-            + "\n\nGrounded synthesis: the response is derived from the supporting chunks above."
-        )
+        query_terms = _tokens(query)
+        candidates = []
+        for index, item in enumerate(contexts[:6], 1):
+            sentences = re.split(r"(?<=[.!?])\s+", item.get("text", ""))
+            for sentence in sentences:
+                sentence_terms = _tokens(sentence)
+                overlap = len(query_terms & sentence_terms)
+                if sentence.strip() and overlap:
+                    candidates.append((overlap, index, sentence.strip()))
+        candidates.sort(key=lambda item: item[0], reverse=True)
+        selected = candidates[:4]
+        if not selected:
+            return "I found related passages, but not enough direct evidence to answer confidently. Review the supporting passages below."
+        lines = [f"{sentence} [{index}]" for _, index, sentence in selected]
+        return "Based on the retrieved evidence:\n\n" + "\n\n".join(lines) + "\n\nThe answer is limited to claims supported by these cited passages."
 
 
 class EvidenceVerifier:
@@ -64,6 +69,12 @@ class EvidenceVerifier:
                 "evidence_score": 0.0,
                 "hallucination_score": 1.0,
                 "hallucination_risk": "high",
+                "confidence": 0.0,
+                "ets": 0.0,
+                "eif": 0.0,
+                "citation_completeness": 0.0,
+                "unsupported_claims": [],
+                "conflicts": [],
                 "matched_terms": [],
                 "unsupported_terms": sorted(_tokens(answer))[:20],
             }
@@ -96,6 +107,11 @@ class EvidenceVerifier:
             "confidence": round(confidence, 4),
             "hallucination_score": round(hallucination_score, 4),
             "hallucination_risk": risk,
+            "ets": round(evidence_score, 4),
+            "eif": round(evidence_score, 4),
+            "citation_completeness": 0.0,
+            "unsupported_claims": unsupported[:30],
+            "conflicts": [],
             "matched_terms": matched[:30],
             "unsupported_terms": unsupported[:30],
         }
@@ -107,7 +123,7 @@ class TrustRAGPipeline:
         self.generator = AnswerGenerator()
         self.verifier = EvidenceVerifier()
 
-    def run(self, query: str, top_k: int = 5, mode: str = "adaptive", owner_id: Optional[str] = None, document_ids: Optional[List[str]] = None) -> Dict:
+    def run(self, query: str, top_k: int = 5, mode: str = "adaptive", owner_id: Optional[str] = None, document_ids: Optional[List[str]] = None, intent: Optional[str] = None) -> Dict:
         if mode == "baseline":
             retrieval = self.retrieval.baseline_query(query, top_k=top_k, owner_id=owner_id, document_ids=document_ids)
         elif mode == "hybrid":
@@ -115,7 +131,7 @@ class TrustRAGPipeline:
         elif mode == "hybrid_rerank":
             retrieval = self.retrieval.hybrid_query(query, top_k=top_k, rerank=True, owner_id=owner_id, document_ids=document_ids)
         else:
-            retrieval = self.retrieval.query(query, top_k=top_k, owner_id=owner_id, document_ids=document_ids)
+            retrieval = self.retrieval.query(query, top_k=top_k, owner_id=owner_id, document_ids=document_ids, intent=intent)
 
         contexts = retrieval.get("results", [])
         answer = self.generator.generate(query, contexts, retrieval.get("intent"))

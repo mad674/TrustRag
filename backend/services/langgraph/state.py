@@ -22,3 +22,5 @@ class QueryState(TypedDict):
     refinement_iterations: int
     correction_performed: bool
     llm_provider: str
+    tool_calls: List[dict]
+    agent_decisions: List[dict]

@@ -10,6 +10,12 @@ export default function Upload() {
   const [uploading, setUploading] = useState(false);
   const stages = ['Validate file', 'Parse document', 'Clean and chunk text', 'Generate embeddings', 'Index evidence'];
 
+  const chooseFile = (nextFile?: File) => {
+    setError('');
+    setMessage('');
+    if (nextFile) setFile(nextFile);
+  };
+
   const submit = async () => {
     if (!file) return;
     if (file.size > 25 * 1024 * 1024) {
@@ -46,8 +52,13 @@ export default function Upload() {
             <input
               type="file"
               accept=".pdf,.docx,.txt,.md,.markdown"
-              onChange={(event) => setFile(event.target.files?.[0] ?? null)}
+              onChange={(event) => chooseFile(event.target.files?.[0])}
             />
+          </label>
+          <label className="dropzone" onDragOver={(event) => event.preventDefault()} onDrop={(event) => { event.preventDefault(); chooseFile(event.dataTransfer.files?.[0]); }}>
+            <strong>Drop a document here</strong>
+            <span>PDF, DOCX, TXT, or Markdown up to 25 MB</span>
+            <small>{file ? `Ready: ${file.name}` : 'or use the file picker above'}</small>
           </label>
           <div className="actions">
             <button className="primary" onClick={submit} disabled={!file || loading}>

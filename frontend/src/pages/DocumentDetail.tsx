@@ -11,6 +11,7 @@ export default function DocumentDetail() {
   const [loading, setLoading] = useState(true);
   const [working, setWorking] = useState(false);
   const [summaryReady, setSummaryReady] = useState(false);
+  const [indexing, setIndexing] = useState(false);
   const [error, setError] = useState('');
 
   useEffect(() => {
@@ -30,6 +31,19 @@ export default function DocumentDetail() {
     navigate('/documents');
   };
 
+  const reindex = async () => {
+    setIndexing(true);
+    setError('');
+    try {
+      await documents.index(id);
+      setDocument((current: any) => ({ ...current, processing_status: 'indexed' }));
+    } catch (err: any) {
+      setError(err.response?.data?.detail || 'Evidence indexing failed');
+    } finally {
+      setIndexing(false);
+    }
+  };
+
   if (loading) return <main className="workspace"><div className="panel card"><p className="muted">Loading document...</p></div></main>;
   if (!document) return <main className="workspace"><div className="notice error">{error || 'Document not found'}</div></main>;
 
@@ -40,7 +54,7 @@ export default function DocumentDetail() {
     </section>
     {error && <div className="notice error">{error}</div>}
     <section className="detail-grid">
-      <article className="panel card"><h3>Metadata</h3><dl className="metadata"><dt>Status</dt><dd>{document.processing_status}</dd><dt>Characters</dt><dd>{document.content?.length?.toLocaleString()}</dd><dt>Uploaded</dt><dd>{document.created_at ? new Date(document.created_at).toLocaleString() : 'Unknown'}</dd></dl><h3>Extracted evidence</h3><pre className="document-text">{document.content}</pre></article>
+      <article className="panel card"><h3>Metadata</h3><dl className="metadata"><dt>Status</dt><dd>{document.processing_status}</dd><dt>Characters</dt><dd>{document.content?.length?.toLocaleString()}</dd><dt>Uploaded</dt><dd>{document.created_at ? new Date(document.created_at).toLocaleString() : 'Unknown'}</dd></dl>{document.processing_status !== 'indexed' && <button className="secondary" onClick={reindex} disabled={indexing}>{indexing ? 'Indexing evidence...' : 'Retry evidence indexing'}</button>}<h3>Extracted evidence</h3><pre className="document-text">{document.content}</pre></article>
       <aside className="panel card"><h3>Grounded summary</h3><div className="summary-controls"><select value={mode} onChange={(event) => setMode(event.target.value as typeof mode)}><option value="short">Short</option><option value="executive">Executive</option><option value="detailed">Detailed</option></select><button className="primary" onClick={createSummary} disabled={working}>{working ? 'Generating...' : 'Generate'}</button></div>{summaryReady ? <p className="answer-text">{summary}</p> : <p className="muted">Generate a summary from this document using the configured AI provider.</p>}<Link className="secondary link-button" to={`/chat?document=${id}`}>Ask a question about this document</Link></aside>
     </section>
   </main>;

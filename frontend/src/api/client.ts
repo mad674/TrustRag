@@ -18,6 +18,17 @@ apiClient.interceptors.request.use((config) => {
   return config;
 });
 
+apiClient.interceptors.response.use(
+  (response) => response,
+  (error) => {
+    if (error.response?.status === 401 && !window.location.pathname.startsWith('/login')) {
+      localStorage.removeItem('token');
+      window.location.assign('/login');
+    }
+    return Promise.reject(error);
+  },
+);
+
 // Auth endpoints
 export const auth = {
   register: (username: string, email: string, password: string) =>
@@ -27,6 +38,10 @@ export const auth = {
       headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
     }),
   me: () => apiClient.get('/api/users/me'),
+};
+
+export const health = {
+  readiness: () => apiClient.get('/api/health/readiness'),
 };
 
 // Document endpoints
@@ -65,8 +80,8 @@ export const retrieval = {
 
 // Orchestration endpoint
 export const orchestration = {
-  query: (query: string, topK: number = 10, documentIds: string[] = []) =>
-    apiClient.post('/api/orchestrate/query', { query, top_k: topK, document_ids: documentIds }),
+  query: (query: string, topK: number = 10, documentIds: string[] = [], mode: string = 'auto') =>
+    apiClient.post('/api/orchestrate/query', { query, top_k: topK, document_ids: documentIds, mode }),
 };
 
 export const reports = {

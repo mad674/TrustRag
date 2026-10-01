@@ -6,7 +6,7 @@ import re
 import uuid
 from sqlalchemy.orm import Session
 from pydantic import BaseModel, Field
-from typing import List, Optional
+from typing import List, Optional, Literal
 from ..auth import get_current_user
 from services.langgraph.orchestrator import get_orchestrator
 from services.langgraph.state import QueryState
@@ -26,6 +26,7 @@ class OrchestrateRequest(BaseModel):
     query: str = Field(min_length=1, max_length=2000)
     top_k: int = Field(default=10, ge=1, le=50)
     document_ids: List[uuid.UUID] = Field(default_factory=list)
+    mode: Literal["auto", "qa", "definition", "summarization", "comparison", "citation", "research_gap"] = "auto"
 
 
 class OrchestrateResponse(BaseModel):
@@ -48,6 +49,8 @@ class OrchestrateResponse(BaseModel):
     correction_performed: bool
     reranking_explanation: str
     report: str
+    tool_calls: List[dict] = []
+    agent_decisions: List[dict] = []
 
 
 @router.post("/query", response_model=OrchestrateResponse)
@@ -76,7 +79,7 @@ async def orchestrate_query(
                 candidates = db.query(Document).filter(Document.uploaded_by == current_user.id).all()
                 target_docs = [doc for doc in candidates if query_terms & set(re.findall(r"[a-z0-9]+", f"{doc.title} {doc.filename}".lower()))]
 
-        if target_docs and any(word in req.query.lower() for word in ("summarize", "summary", "summarise")):
+        if target_docs and (req.mode == "summarization" or any(word in req.query.lower() for word in ("summarize", "summary", "summarise"))):
             chunks = []
             for doc in target_docs:
                 normalized = re.sub(r"\s+", " ", doc.content or "").strip()
@@ -92,6 +95,7 @@ async def orchestrate_query(
                 mode="adaptive",
                 owner_id=str(current_user.id),
                 document_ids=[str(doc_id) for doc_id in req.document_ids] or None,
+                intent=None if req.mode == "auto" else req.mode,
             )
         retrieved_docs = pipeline_response.get("supporting_chunks", [])
         
@@ -121,6 +125,7 @@ async def orchestrate_query(
                 "llm_config": user_llm_config,
                 "memory": UserMemoryService().get(db, current_user.id),
                 "document_ids": [str(doc_id) for doc_id in req.document_ids],
+                "top_k": req.top_k,
             }
         }
         
@@ -159,7 +164,9 @@ async def orchestrate_query(
             claims=final_state.get("claims", []),
             correction_performed=bool(final_state.get("correction_performed")),
             reranking_explanation=pipeline_response.get("reranking_explanation", ""),
-            report=final_state.get("report", "")
+            report=final_state.get("report", ""),
+            tool_calls=final_state.get("tool_calls", []),
+            agent_decisions=final_state.get("agent_decisions", []),
         )
         UserMemoryService().remember_query(db, current_user.id, req.query, response.model_dump())
         return response

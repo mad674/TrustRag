@@ -10,6 +10,55 @@ from services.llm_service import get_llm_service
 from services.adaptive_retrieval.service import get_service as get_retrieval_service
 
 
+class SupervisorAgent:
+    """Plans the workflow and executes retrieval when the graph lacks evidence."""
+
+    def process(self, state: QueryState) -> QueryState:
+        intent = (state.get("intent") or "qa").lower()
+        task = {
+            "summarization": "summary",
+            "comparison": "comparison",
+            "definition": "definition",
+            "citation": "citation_response",
+            "research_gap": "research_gap",
+        }.get(intent, "qa")
+        state["agent_decisions"] = [{
+            "agent": "supervisor",
+            "decision": "route_task",
+            "intent": intent,
+            "task": task,
+            "reason": f"Intent '{intent}' maps to the specialized {task} workflow.",
+        }]
+        state.setdefault("tool_calls", [])
+        if not state.get("retrieved_docs"):
+            metadata = state.get("metadata", {})
+            strategy = metadata.get("retrieval_strategy") or "hybrid"
+            owner_id = metadata.get("user_id")
+            result = get_retrieval_service().retrieve(
+                state.get("query", ""),
+                top_k=int(metadata.get("top_k", 8)),
+                strategy=strategy,
+                rerank=strategy == "hybrid_rerank",
+                owner_id=str(owner_id) if owner_id else None,
+                document_ids=metadata.get("document_ids") or None,
+            )
+            state["retrieved_docs"] = result.get("results", [])
+            state["tool_calls"].append({
+                "tool": "adaptive_retrieval",
+                "action": "execute",
+                "strategy": strategy,
+                "result_count": len(state["retrieved_docs"]),
+            })
+        else:
+            state["tool_calls"].append({
+                "tool": "adaptive_retrieval",
+                "action": "reuse",
+                "result_count": len(state.get("retrieved_docs", [])),
+            })
+        state["task"] = task
+        return state
+
+
 class QAAgent:
     """Question Answering agent - answers queries based on retrieved documents"""
     
@@ -42,20 +91,21 @@ class QAAgent:
         if not docs:
             return f"I could not find information to answer: {query}"
 
-        evidence = []
-        for index, doc in enumerate(docs[:4], 1):
-            text = " ".join(doc.get("text", "").split())
-            if len(text) > 420:
-                text = text[:420].rsplit(" ", 1)[0] + "..."
-            title = doc.get("title") or f"Document {doc.get('doc_id', index)}"
-            evidence.append(f"[{index}] {title}: {text}")
-
-        fallback = (
-            f"TrustRAG found {len(docs)} relevant evidence passage(s) for: {query}\n\n"
-            + "\n\n".join(evidence)
-            + "\n\nSynthesis: this answer is grounded in the cited passages. "
-            "Review the supporting evidence and confidence score before using it for high-stakes decisions."
-        )
+        query_terms = {word for word in re.findall(r"\w+", query.lower()) if len(word) > 3}
+        candidates = []
+        for index, doc in enumerate(docs[:6], 1):
+            for sentence in re.split(r"(?<=[.!?])\s+", doc.get("text", "")):
+                sentence_terms = {word for word in re.findall(r"\w+", sentence.lower()) if len(word) > 3}
+                overlap = len(query_terms & sentence_terms)
+                if sentence.strip() and overlap:
+                    candidates.append((overlap, index, sentence.strip()))
+        candidates.sort(key=lambda item: item[0], reverse=True)
+        if candidates:
+            fallback = "Based on the retrieved evidence:\n\n" + "\n\n".join(
+                f"{sentence} [{index}]" for _, index, sentence in candidates[:4]
+            ) + "\n\nThe answer is limited to claims supported by these cited passages."
+        else:
+            fallback = "I found related passages, but not enough direct evidence to answer confidently. Review the supporting passages below."
         evidence_block = "\n\n".join(
             f"[{index}] {doc.get('title', 'Unknown')} | chunk {doc.get('chunk_index', 'n/a')}: {doc.get('text', '')}"
             for index, doc in enumerate(docs[:6], 1)
@@ -72,7 +122,14 @@ class QAAgent:
 class TaskRouterAgent:
     def process(self, state: QueryState) -> QueryState:
         intent = (state.get("intent") or "qa").lower()
-        task = "summary" if intent == "summarization" else "comparison" if intent == "comparison" else "qa"
+        task = {
+            "summarization": "summary",
+            "comparison": "comparison",
+            "definition": "definition",
+            "citation": "citation_response",
+            "research_gap": "research_gap",
+            "qa": "qa",
+        }.get(intent, "qa")
         state["task"] = task
         state.setdefault("explanations", []).append(f"Task router selected {task} agent")
         return state
@@ -113,6 +170,12 @@ class CorrectionSearchAgent:
         state["structured_answer"] = None
         state["sources"] = []
         state.setdefault("explanations", []).append("Verification requested one bounded correction search using hybrid reranking")
+        state.setdefault("tool_calls", []).append({
+            "tool": "correction_search",
+            "action": "execute",
+            "strategy": "hybrid_rerank",
+            "result_count": len(state.get("retrieved_docs", [])),
+        })
         return state
 
 
@@ -172,6 +235,53 @@ class ComparisonAgent:
         return state
 
 
+class DefinitionAgent:
+    """Explains a term using only the strongest retrieved evidence."""
+
+    def process(self, state: QueryState) -> QueryState:
+        docs = state.get("retrieved_docs", [])
+        evidence = "\n\n".join(f"[{i}] {doc.get('text', '')}" for i, doc in enumerate(docs[:6], 1))
+        fallback = "No definition could be verified from the retrieved evidence."
+        state["structured_answer"] = get_llm_service().generate(
+            "You are a definition agent. Define the requested concept only from the supplied evidence, cite [n], and state when the evidence is insufficient.",
+            f"TERM REQUEST:\n{state.get('query', '')}\n\nEVIDENCE:\n{evidence}",
+            fallback,
+            config=state.get("metadata", {}).get("llm_config"),
+        )
+        return state
+
+
+class CitationResponseAgent:
+    """Produces a source-focused response without inventing bibliographic data."""
+
+    def process(self, state: QueryState) -> QueryState:
+        docs = state.get("retrieved_docs", [])
+        if not docs:
+            state["structured_answer"] = "No citable evidence was found."
+            return state
+        lines = []
+        for index, doc in enumerate(docs[:8], 1):
+            lines.append(f"[{index}] {doc.get('title', 'Untitled')} - chunk {doc.get('chunk_index', 'n/a')}: {doc.get('text', '')[:260].strip()}")
+        state["structured_answer"] = "Retrieved citation candidates:\n\n" + "\n\n".join(lines)
+        return state
+
+
+class ResearchGapAgent:
+    """Identifies limitations and unanswered areas grounded in retrieved text."""
+
+    def process(self, state: QueryState) -> QueryState:
+        docs = state.get("retrieved_docs", [])
+        evidence = "\n\n".join(f"[{i}] {doc.get('text', '')}" for i, doc in enumerate(docs[:8], 1))
+        fallback = "No explicit research gap could be verified in the retrieved evidence."
+        state["structured_answer"] = get_llm_service().generate(
+            "You are a research-gap agent. Identify limitations, open problems, missing evidence, and future-work signals only from the supplied passages. Cite [n] and distinguish explicit gaps from reasonable interpretations.",
+            f"RESEARCH GAP REQUEST:\n{state.get('query', '')}\n\nEVIDENCE:\n{evidence}",
+            fallback,
+            config=state.get("metadata", {}).get("llm_config"),
+        )
+        return state
+
+
 class CitationAgent:
     """Citation agent - extracts and formats citations from sources"""
     
@@ -220,6 +330,7 @@ class VerificationAgent:
                 "conflicts": [],
                 "grounded_statements": []
             }
+            state["confidence"] = 0.0
             return state
         
         # Check if answer references are grounded in documents
@@ -250,6 +361,14 @@ class VerificationAgent:
         if unsupported or verification["conflicts"]:
             verification["needs_correction_search"] = True
         state["verification_results"] = verification
+        state["confidence"] = float(verification.get("evidence_score", state.get("confidence", 0.0)))
+        state.setdefault("tool_calls", []).append({
+            "tool": "evidence_verification",
+            "action": "execute",
+            "status": verification.get("verification_status", "UNSUPPORTED"),
+            "unsupported_claims": len(verification.get("unsupported_claims", [])),
+            "conflicts": len(verification.get("conflicts", [])),
+        })
         
         return state
     
@@ -366,6 +485,11 @@ class ReportAgent:
         report_lines.extend([
             f"\nVerification Status: {'Grounded' if verification.get('is_grounded') else 'Not verified'}",
             f"Hallucination Risk: {verification.get('hallucination_risk', 'unknown').upper()}",
+            f"Evidence Trust Score: {verification.get('ets', verification.get('evidence_score', 0.0)):.2%}",
+            f"Explained Information Fraction: {verification.get('eif', 0.0):.2%}",
+            f"Citation Completeness: {verification.get('citation_completeness', 0.0):.2%}",
+            f"Unsupported Claims: {len(verification.get('unsupported_claims', []))}",
+            f"Conflicts Detected: {len(verification.get('conflicts', []))}",
             "\nExplanations:",
         ])
         

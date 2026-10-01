@@ -68,6 +68,7 @@ function App() {
       </aside>
       <div className="main-area">
         <header className="mobile-header"><Link to="/dashboard" className="brand-lockup"><span className="brand-mark">T</span><strong>TrustRAG</strong></Link><button className="secondary compact" onClick={() => dispatch(logout())}>Sign out</button></header>
+        <nav className="mobile-nav" aria-label="Workspace navigation">{links.slice(0, 4).map(([to, label]) => <NavLink key={to} to={to}>{label}</NavLink>)}</nav>
         <div className="workspace-topbar"><span>Evidence workspace</span><span className="system-status"><i /> All systems operational</span></div>
         {child}
       </div>

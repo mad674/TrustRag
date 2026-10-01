@@ -27,7 +27,7 @@ class AdaptiveRetrieval:
     def build_indices(self):
         db: Session = SessionLocal()
         try:
-            docs = db.query(Document).all()
+            docs = db.query(Document).filter(Document.processing_status == "indexed").all()
             chunks = []
             for doc in docs:
                 text = doc.content or ''
@@ -153,8 +153,8 @@ class AdaptiveRetrieval:
         response['selection_reason'] = 'Fixed Hybrid RAG uses lexical plus semantic retrieval for every query.'
         return response
 
-    def query(self, query: str, top_k: int = 5, owner_id: Optional[str] = None, document_ids: Optional[List[str]] = None) -> Dict:
-        intent = self.classifier(query)
+    def query(self, query: str, top_k: int = 5, owner_id: Optional[str] = None, document_ids: Optional[List[str]] = None, intent: Optional[str] = None) -> Dict:
+        intent = intent or self.classifier(query)
         strategy = select_strategy(intent)
         response = self.retrieve(query, top_k=top_k, strategy=strategy, owner_id=owner_id, document_ids=document_ids)
         response['intent'] = intent

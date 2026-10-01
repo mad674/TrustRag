@@ -80,6 +80,8 @@ def test_document_workflows(client):
     history_detail = client.get(f"/api/memory/history/{history.json()[0]['id']}", headers=headers)
     assert history_detail.status_code == 200
     assert history_detail.json()["response"]["answer"]
+    assert "tool_calls" in history_detail.json()["response"]
+    assert "agent_decisions" in history_detail.json()["response"]
 
     deleted = client.delete(f"/api/documents/{first_id}", headers=headers)
     assert deleted.status_code == 200
