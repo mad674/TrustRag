@@ -107,15 +107,15 @@ class TrustRAGPipeline:
         self.generator = AnswerGenerator()
         self.verifier = EvidenceVerifier()
 
-    def run(self, query: str, top_k: int = 5, mode: str = "adaptive", owner_id: Optional[str] = None) -> Dict:
+    def run(self, query: str, top_k: int = 5, mode: str = "adaptive", owner_id: Optional[str] = None, document_ids: Optional[List[str]] = None) -> Dict:
         if mode == "baseline":
-            retrieval = self.retrieval.baseline_query(query, top_k=top_k, owner_id=owner_id)
+            retrieval = self.retrieval.baseline_query(query, top_k=top_k, owner_id=owner_id, document_ids=document_ids)
         elif mode == "hybrid":
-            retrieval = self.retrieval.hybrid_query(query, top_k=top_k, rerank=False, owner_id=owner_id)
+            retrieval = self.retrieval.hybrid_query(query, top_k=top_k, rerank=False, owner_id=owner_id, document_ids=document_ids)
         elif mode == "hybrid_rerank":
-            retrieval = self.retrieval.hybrid_query(query, top_k=top_k, rerank=True, owner_id=owner_id)
+            retrieval = self.retrieval.hybrid_query(query, top_k=top_k, rerank=True, owner_id=owner_id, document_ids=document_ids)
         else:
-            retrieval = self.retrieval.query(query, top_k=top_k, owner_id=owner_id)
+            retrieval = self.retrieval.query(query, top_k=top_k, owner_id=owner_id, document_ids=document_ids)
 
         contexts = retrieval.get("results", [])
         answer = self.generator.generate(query, contexts, retrieval.get("intent"))

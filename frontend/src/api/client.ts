@@ -65,8 +65,8 @@ export const retrieval = {
 
 // Orchestration endpoint
 export const orchestration = {
-  query: (query: string, topK: number = 10) =>
-    apiClient.post('/api/orchestrate/query', { query, top_k: topK }),
+  query: (query: string, topK: number = 10, documentIds: string[] = []) =>
+    apiClient.post('/api/orchestrate/query', { query, top_k: topK, document_ids: documentIds }),
 };
 
 export const reports = {
@@ -76,13 +76,15 @@ export const reports = {
 
 export const llmSettings = {
   get: () => apiClient.get('/api/settings/llm'),
-  validate: (payload: { provider: string; model: string; base_url?: string; api_key?: string; temperature: number; max_tokens: number }) =>
+  validate: (payload: { provider: string; model: string; base_url?: string; api_key?: string; temperature: number }) =>
     apiClient.post('/api/settings/llm/validate', payload),
+  revokeKey: () => apiClient.delete('/api/settings/llm/key'),
 };
 
 export const memory = {
   get: () => apiClient.get('/api/memory'),
   history: () => apiClient.get('/api/memory/history'),
+  record: (id: string) => apiClient.get(`/api/memory/history/${id}`),
 };
 
 export const evaluation = {

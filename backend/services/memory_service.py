@@ -33,9 +33,41 @@ class UserMemoryService:
         if signature not in long_term:
             long_term.append(signature)
         item.long_term = long_term[-20:]
-        db.add(QueryRecord(user_id=user_id, query=query, intent=response.get("intent"), strategy=response.get("retrieval_strategy"), confidence=float(response.get("confidence", 0.0)), verification_status=(response.get("verification") or {}).get("verification_status"), response_json={"sources": response.get("sources", []), "claims": response.get("claims", [])}))
+        db.add(QueryRecord(
+            user_id=user_id,
+            query=query,
+            intent=response.get("intent"),
+            strategy=response.get("retrieval_strategy"),
+            confidence=float(response.get("confidence", 0.0)),
+            verification_status=(response.get("verification") or {}).get("verification_status"),
+            response_json={
+                "answer": response.get("answer", ""),
+                "sources": response.get("sources", []),
+                "supporting_chunks": response.get("supporting_chunks", []),
+                "claims": response.get("claims", []),
+                "verification": response.get("verification"),
+                "explanations": response.get("explanations", []),
+                "pipeline_trace": response.get("pipeline_trace", []),
+                "report": response.get("report", ""),
+            },
+        ))
         db.commit()
 
     def history(self, db: Session, user_id, limit: int = 30) -> list[dict[str, Any]]:
         records = db.query(QueryRecord).filter(QueryRecord.user_id == user_id).order_by(QueryRecord.created_at.desc()).limit(limit).all()
         return [{"id": str(item.id), "query": item.query, "intent": item.intent, "strategy": item.strategy, "confidence": item.confidence, "verification_status": item.verification_status, "created_at": item.created_at.isoformat()} for item in records]
+
+    def get_record(self, db: Session, user_id, record_id) -> dict[str, Any] | None:
+        item = db.query(QueryRecord).filter(QueryRecord.id == record_id, QueryRecord.user_id == user_id).first()
+        if not item:
+            return None
+        return {
+            "id": str(item.id),
+            "query": item.query,
+            "intent": item.intent,
+            "strategy": item.strategy,
+            "confidence": item.confidence,
+            "verification_status": item.verification_status,
+            "created_at": item.created_at.isoformat(),
+            "response": item.response_json or {},
+        }

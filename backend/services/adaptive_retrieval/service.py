@@ -55,16 +55,18 @@ class AdaptiveRetrieval:
         if not self._built:
             self.build_indices()
 
-    def _dense_query(self, query: str, limit: int = 50, owner_id: Optional[str] = None) -> List[Dict]:
+    def _dense_query(self, query: str, limit: int = 50, owner_id: Optional[str] = None, document_ids: Optional[set[str]] = None) -> List[Dict]:
         try:
-            return self.dense.retrieve(query, limit=limit, owner_id=owner_id)
+            return self.dense.retrieve(query, limit=limit, owner_id=owner_id, document_ids=document_ids)
         except Exception:
             return []
 
-    def _bm25_query(self, query: str, limit: int = 50, owner_id: Optional[str] = None) -> List[Dict]:
+    def _bm25_query(self, query: str, limit: int = 50, owner_id: Optional[str] = None, document_ids: Optional[set[str]] = None) -> List[Dict]:
         results = self.bm25.query(query, top_k=limit)
         if owner_id:
             results = [item for item in results if item.get('owner_id') == owner_id]
+        if document_ids is not None:
+            results = [item for item in results if item.get('doc_id') in document_ids]
         for result in results:
             score = float(result.get('score', 0.0))
             result.pop('tokens', None)
@@ -97,12 +99,13 @@ class AdaptiveRetrieval:
         merged.sort(key=lambda item: item.get('score', 0.0), reverse=True)
         return merged
 
-    def retrieve(self, query: str, top_k: int = 5, strategy: str = 'dense', rerank: Optional[bool] = None, owner_id: Optional[str] = None) -> Dict:
+    def retrieve(self, query: str, top_k: int = 5, strategy: str = 'dense', rerank: Optional[bool] = None, owner_id: Optional[str] = None, document_ids: Optional[List[str]] = None) -> Dict:
         self._ensure_built()
         strategy = strategy or 'dense'
+        allowed_documents = set(document_ids) if document_ids is not None else None
 
-        bm25_results = self._bm25_query(query, limit=50, owner_id=owner_id) if strategy in {'bm25', 'hybrid', 'hybrid_rerank'} else []
-        dense_results = self._dense_query(query, limit=50, owner_id=owner_id) if strategy in {'dense', 'hybrid', 'hybrid_rerank'} else []
+        bm25_results = self._bm25_query(query, limit=50, owner_id=owner_id, document_ids=allowed_documents) if strategy in {'bm25', 'hybrid', 'hybrid_rerank'} else []
+        dense_results = self._dense_query(query, limit=50, owner_id=owner_id, document_ids=allowed_documents) if strategy in {'dense', 'hybrid', 'hybrid_rerank'} else []
 
         if strategy == 'bm25':
             candidates = bm25_results
@@ -135,25 +138,25 @@ class AdaptiveRetrieval:
             'results': results,
         }
 
-    def baseline_query(self, query: str, top_k: int = 5, owner_id: Optional[str] = None) -> Dict:
-        response = self.retrieve(query, top_k=top_k, strategy='dense', rerank=False, owner_id=owner_id)
+    def baseline_query(self, query: str, top_k: int = 5, owner_id: Optional[str] = None, document_ids: Optional[List[str]] = None) -> Dict:
+        response = self.retrieve(query, top_k=top_k, strategy='dense', rerank=False, owner_id=owner_id, document_ids=document_ids)
         response['intent'] = 'baseline'
         response['phase'] = 'baseline_dense_rag'
         response['selection_reason'] = 'Baseline RAG uses dense vector retrieval for every query.'
         return response
 
-    def hybrid_query(self, query: str, top_k: int = 5, rerank: bool = False, owner_id: Optional[str] = None) -> Dict:
+    def hybrid_query(self, query: str, top_k: int = 5, rerank: bool = False, owner_id: Optional[str] = None, document_ids: Optional[List[str]] = None) -> Dict:
         strategy = 'hybrid_rerank' if rerank else 'hybrid'
-        response = self.retrieve(query, top_k=top_k, strategy=strategy, rerank=rerank, owner_id=owner_id)
+        response = self.retrieve(query, top_k=top_k, strategy=strategy, rerank=rerank, owner_id=owner_id, document_ids=document_ids)
         response['intent'] = 'fixed_hybrid'
         response['phase'] = 'fixed_hybrid_rag'
         response['selection_reason'] = 'Fixed Hybrid RAG uses lexical plus semantic retrieval for every query.'
         return response
 
-    def query(self, query: str, top_k: int = 5, owner_id: Optional[str] = None) -> Dict:
+    def query(self, query: str, top_k: int = 5, owner_id: Optional[str] = None, document_ids: Optional[List[str]] = None) -> Dict:
         intent = self.classifier(query)
         strategy = select_strategy(intent)
-        response = self.retrieve(query, top_k=top_k, strategy=strategy, owner_id=owner_id)
+        response = self.retrieve(query, top_k=top_k, strategy=strategy, owner_id=owner_id, document_ids=document_ids)
         response['intent'] = intent
         response['phase'] = 'adaptive_retrieval'
         response['selection_reason'] = (

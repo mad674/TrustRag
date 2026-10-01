@@ -1,9 +1,11 @@
 
-import { BrowserRouter as Router, Routes, Route, Navigate, NavLink, Link } from 'react-router-dom';
+import { BrowserRouter as Router, Routes, Route, Navigate, NavLink, Link, useNavigate } from 'react-router-dom';
+import { useEffect, useState } from 'react';
 import { useSelector } from 'react-redux';
 import { RootState } from './store';
 import { useDispatch } from 'react-redux';
-import { logout } from './store/authSlice';
+import { getMe, logout, sessionReady } from './store/authSlice';
+import { AppDispatch } from './store';
 import Login from './pages/Login';
 import Register from './pages/Register';
 import Dashboard from './pages/Dashboard';
@@ -14,11 +16,37 @@ import DocumentDetail from './pages/DocumentDetail';
 import Compare from './pages/Compare';
 import Reports from './pages/Reports';
 import Settings from './pages/Settings';
+import { llmSettings } from './api/client';
+
+function AIOnly({ children }: { children: JSX.Element }) {
+  const navigate = useNavigate();
+  const [checking, setChecking] = useState(true);
+  const [ready, setReady] = useState(false);
+
+  useEffect(() => {
+    llmSettings.get().then((response) => {
+      setReady(Boolean(response.data.is_verified && (response.data.provider === 'fallback' || response.data.has_api_key)));
+    }).catch(() => setReady(false)).finally(() => setChecking(false));
+  }, []);
+
+  useEffect(() => {
+    if (!checking && !ready) navigate('/settings', { replace: true });
+  }, [checking, navigate, ready]);
+
+  if (checking || !ready) return <div className="workspace"><section className="panel card"><strong>Checking AI provider readiness...</strong></section></div>;
+  return children;
+}
 
 function App() {
   const token = useSelector((state: RootState) => state.auth.token);
+  const ready = useSelector((state: RootState) => state.auth.ready);
   const username = useSelector((state: RootState) => state.auth.user?.username);
-  const dispatch = useDispatch();
+  const dispatch = useDispatch<AppDispatch>();
+
+  useEffect(() => {
+    if (token) dispatch(getMe());
+    else dispatch(sessionReady());
+  }, [dispatch, token]);
 
   const shell = (child: JSX.Element) => {
     const links = [
@@ -48,6 +76,7 @@ function App() {
   
   return (
     <Router>
+      {!ready ? <div className="auth-screen"><div className="panel auth-card"><strong>Restoring your secure workspace...</strong></div></div> :
       <Routes>
         {!token ? (
           <>
@@ -58,18 +87,18 @@ function App() {
         ) : (
           <>
             <Route path="/dashboard" element={shell(<Dashboard />)} />
-            <Route path="/chat" element={shell(<Chat />)} />
+            <Route path="/chat" element={shell(<AIOnly><Chat /></AIOnly>)} />
             <Route path="/upload" element={shell(<Upload />)} />
-              <Route path="/evaluation" element={shell(<Evaluation />)} />
+              <Route path="/evaluation" element={shell(<AIOnly><Evaluation /></AIOnly>)} />
               <Route path="/documents" element={shell(<Dashboard />)} />
               <Route path="/documents/:id" element={shell(<DocumentDetail />)} />
-              <Route path="/compare" element={shell(<Compare />)} />
-              <Route path="/reports" element={shell(<Reports />)} />
+              <Route path="/compare" element={shell(<AIOnly><Compare /></AIOnly>)} />
+              <Route path="/reports" element={shell(<AIOnly><Reports /></AIOnly>)} />
               <Route path="/settings" element={shell(<Settings />)} />
             <Route path="*" element={<Navigate to="/dashboard" replace />} />
           </>
         )}
-      </Routes>
+      </Routes>}
     </Router>
   );
 }

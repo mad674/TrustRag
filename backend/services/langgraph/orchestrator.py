@@ -93,10 +93,29 @@ class TrustRAGOrchestrator:
         
         if self.graph is not None:
             return self.graph.invoke(state)
-        state = self.qa_agent.process(state)
+        state = self.task_router.process(state)
+        task = state.get("task", "qa")
+        if task == "summary":
+            state = self.summary_agent.process(state)
+        elif task == "comparison":
+            state = self.comparison_agent.process(state)
+        else:
+            state = self.qa_agent.process(state)
+        state = self.claim_extractor.process(state)
         state = self.citation_agent.process(state)
         state = self.verification_agent.process(state)
-        state = self.summary_agent.process(state)
+        if (state.get("verification_results") or {}).get("needs_correction_search"):
+            state = self.correction_search.process(state)
+            if state.get("correction_performed"):
+                if task == "summary":
+                    state = self.summary_agent.process(state)
+                elif task == "comparison":
+                    state = self.comparison_agent.process(state)
+                else:
+                    state = self.qa_agent.process(state)
+                state = self.claim_extractor.process(state)
+                state = self.citation_agent.process(state)
+                state = self.verification_agent.process(state)
         state = self.explainability_agent.process(state)
         return self.report_agent.process(state)
     

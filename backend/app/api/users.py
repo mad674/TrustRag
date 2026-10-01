@@ -2,7 +2,7 @@ from fastapi import APIRouter, HTTPException, Depends
 from sqlalchemy.orm import Session
 
 from ..schemas import UserCreate, UserOut
-from ..crud import create_user, get_user_by_username
+from ..crud import create_user, get_user_by_username, get_user_by_email
 from ..auth import get_current_user, require_role
 from .deps import get_db
 
@@ -14,6 +14,8 @@ def register(user: UserCreate, db: Session = Depends(get_db)):
     existing = get_user_by_username(db, user.username)
     if existing:
         raise HTTPException(status_code=400, detail="Username already registered")
+    if get_user_by_email(db, user.email):
+        raise HTTPException(status_code=400, detail="Email already registered")
     created = create_user(db, user)
     return created
 

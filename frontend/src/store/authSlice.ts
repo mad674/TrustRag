@@ -6,6 +6,7 @@ interface AuthState {
   token: string | null;
   loading: boolean;
   error: string | null;
+  ready: boolean;
 }
 
 const initialState: AuthState = {
@@ -13,6 +14,7 @@ const initialState: AuthState = {
   token: localStorage.getItem('token'),
   loading: false,
   error: null,
+  ready: false,
 };
 
 export const register = createAsyncThunk(
@@ -42,6 +44,9 @@ const authSlice = createSlice({
   name: 'auth',
   initialState,
   reducers: {
+    sessionReady: (state) => {
+      state.ready = true;
+    },
     logout: (state) => {
       state.user = null;
       state.token = null;
@@ -75,9 +80,16 @@ const authSlice = createSlice({
       })
       .addCase(getMe.fulfilled, (state, action) => {
         state.user = action.payload;
+        state.ready = true;
+      })
+      .addCase(getMe.rejected, (state) => {
+        state.user = null;
+        state.token = null;
+        state.ready = true;
+        localStorage.removeItem('token');
       });
   },
 });
 
-export const { logout } = authSlice.actions;
+export const { logout, sessionReady } = authSlice.actions;
 export default authSlice.reducer;

@@ -75,7 +75,6 @@ async def upload_document(
     db: Session = Depends(get_db),
     current_user=Depends(get_current_user),
 ):
-    llm_config = resolve_user_llm_config(db, current_user.id)
     extension = os.path.splitext(file.filename or '')[1].lower()
     if extension not in ALLOWED_EXTENSIONS:
         raise HTTPException(status_code=400, detail="Supported files: PDF, DOCX, TXT, Markdown")
@@ -106,19 +105,27 @@ async def upload_document(
         file_type=extension.lstrip('.').lower() or 'txt',
         file_size=len(contents),
         content=text,
-        processing_status="indexed",
+        processing_status="processing",
         uploaded_by=current_user.id,
     )
     db.add(db_doc)
     db.commit()
     db.refresh(db_doc)
-    indexed_chunks = index_document_content(db_doc)
+    try:
+        indexed_chunks = index_document_content(db_doc)
+        db_doc.processing_status = "indexed"
+        db.commit()
+    except Exception as exc:
+        db_doc.processing_status = "failed"
+        db.commit()
+        raise HTTPException(status_code=502, detail="Document text was extracted, but evidence indexing failed. Retry indexing from the document page.") from exc
 
     return {
         "id": db_doc.id,
         "filename": db_doc.filename,
         "title": db_doc.title,
         "indexed_chunks": indexed_chunks,
+        "processing_status": db_doc.processing_status,
     }
 
 
@@ -219,8 +226,8 @@ def summarize_document(
 
 @router.get('/{doc_id}')
 def get_document(doc_id: uuid.UUID, db: Session = Depends(get_db), current_user=Depends(get_current_user)):
-    doc = db.query(Document).filter(Document.id == doc_id).first()
-    if not doc or (doc.uploaded_by not in {None, current_user.id}):
+    doc = db.query(Document).filter(Document.id == doc_id, Document.uploaded_by == current_user.id).first()
+    if not doc:
         raise HTTPException(status_code=404, detail="Document not found")
     return {
         "id": doc.id,

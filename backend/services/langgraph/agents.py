@@ -97,7 +97,14 @@ class CorrectionSearchAgent:
         state["refinement_iterations"] = state.get("refinement_iterations", 0) + 1
         query = state.get("query", "")
         owner_id = state.get("metadata", {}).get("user_id")
-        response = get_retrieval_service().retrieve(query, top_k=8, strategy="hybrid_rerank", rerank=True, owner_id=str(owner_id) if owner_id else None)
+        response = get_retrieval_service().retrieve(
+            query,
+            top_k=8,
+            strategy="hybrid_rerank",
+            rerank=True,
+            owner_id=str(owner_id) if owner_id else None,
+            document_ids=state.get("metadata", {}).get("document_ids") or None,
+        )
         if response.get("results"):
             state["retrieved_docs"] = response["results"]
         state["correction_performed"] = True
@@ -177,6 +184,7 @@ class CitationAgent:
         sources = []
         for doc in retrieved_docs:
             sources.append({
+                "citation_id": len(sources) + 1,
                 "doc_id": doc.get("doc_id"),
                 "title": doc.get("title", "Unknown"),
                 "chunk_index": doc.get("chunk_index"),
@@ -203,6 +211,13 @@ class VerificationAgent:
             state["verification_results"] = {
                 "is_grounded": False,
                 "hallucination_risk": "high",
+                "verification_status": "UNSUPPORTED",
+                "evidence_score": 0.0,
+                "ets": 0.0,
+                "eif": 0.0,
+                "citation_completeness": 0.0,
+                "unsupported_claims": [],
+                "conflicts": [],
                 "grounded_statements": []
             }
             return state
@@ -211,11 +226,28 @@ class VerificationAgent:
         verification = self._verify_answer(answer, retrieved_docs)
         for claim in state.get("claims", []):
             claim_text = claim["claim"].lower()
-            overlap = sum(1 for word in set(re.findall(r"\w+", claim_text)) if len(word) > 3 and any(word in doc.get("text", "").lower() for doc in retrieved_docs))
-            claim["status"] = "SUPPORTED" if overlap >= 2 else "UNSUPPORTED"
-            claim["confidence"] = min(0.99, overlap / 5)
+            words = {word for word in re.findall(r"\w+", claim_text) if len(word) > 3}
+            evidence_ids = []
+            best_overlap = 0
+            for index, doc in enumerate(retrieved_docs):
+                doc_words = set(re.findall(r"\w+", doc.get("text", "").lower()))
+                overlap = len(words & doc_words)
+                if overlap > best_overlap:
+                    best_overlap = overlap
+                    evidence_ids = [index + 1]
+                elif overlap and overlap == best_overlap:
+                    evidence_ids.append(index + 1)
+            claim["evidence_ids"] = evidence_ids[:3]
+            claim["status"] = "SUPPORTED" if best_overlap >= 2 else "UNSUPPORTED"
+            claim["confidence"] = min(0.99, best_overlap / max(3, len(words)))
         verification["claims"] = state.get("claims", [])
-        if any(claim["status"] == "UNSUPPORTED" for claim in state.get("claims", [])):
+        unsupported = [claim["claim"] for claim in state.get("claims", []) if claim["status"] == "UNSUPPORTED"]
+        verification["unsupported_claims"] = unsupported
+        verification["citation_completeness"] = round(
+            sum(1 for claim in state.get("claims", []) if claim.get("evidence_ids")) / max(1, len(state.get("claims", []))), 3
+        )
+        verification["conflicts"] = self._find_conflicts(state.get("claims", []), retrieved_docs)
+        if unsupported or verification["conflicts"]:
             verification["needs_correction_search"] = True
         state["verification_results"] = verification
         
@@ -228,14 +260,51 @@ class VerificationAgent:
         
         # Simple grounding check (in production would use LLM)
         answer_lower = answer.lower()
-        grounded = any(word in combined_text for word in answer_lower.split() if len(word) > 3)
+        answer_words = {word for word in re.findall(r"\w+", answer_lower) if len(word) > 3}
+        grounded_words = {word for word in answer_words if word in combined_text}
+        grounded_ratio = len(grounded_words) / max(1, len(answer_words))
+        claims = [sentence.strip() for sentence in re.split(r"(?<=[.!?])\s+", answer) if sentence.strip()]
+        corpus_words = set(re.findall(r"\w+", combined_text))
+        claim_support = sum(
+            1 for claim in claims
+            if len({word for word in re.findall(r"\w+", claim.lower()) if len(word) > 3} & corpus_words) >= 2
+        ) / max(1, len(claims))
+        evidence_score = round((grounded_ratio + claim_support) / 2, 3)
+        eif = round(grounded_ratio, 3)
+        grounded = evidence_score >= 0.35
         
         return {
             "is_grounded": grounded,
             "hallucination_risk": "low" if grounded else "high",
-            "evidence_score": 0.85 if grounded else 0.2,
+            "evidence_score": evidence_score,
+            "ets": evidence_score,
+            "eif": eif,
+            "verification_status": "SUPPORTED" if evidence_score >= 0.7 else "PARTIAL" if grounded else "UNSUPPORTED",
+            "citation_completeness": 0.0,
+            "unsupported_claims": [],
+            "conflicts": [],
             "grounded_statements": ["Answer is supported by retrieved documents"] if grounded else ["Unable to verify answer in documents"]
         }
+
+    @staticmethod
+    def _find_conflicts(claims: List[dict], docs: List[dict]) -> List[dict]:
+        """Flag simple cross-source polarity conflicts for human review."""
+        conflicts = []
+        negative_markers = {"not", "no", "never", "without", "fails", "failed", "cannot"}
+        for claim in claims:
+            words = set(re.findall(r"\w+", claim.get("claim", "").lower()))
+            if not words:
+                continue
+            support = []
+            for index, doc in enumerate(docs, 1):
+                doc_words = set(re.findall(r"\w+", doc.get("text", "").lower()))
+                overlap = len(words & doc_words)
+                polarity = bool(words & negative_markers) == bool(doc_words & negative_markers)
+                if overlap >= 2:
+                    support.append((index, polarity))
+            if any(item[1] for item in support) and any(not item[1] for item in support):
+                conflicts.append({"claim": claim.get("claim", ""), "evidence_ids": [item[0] for item in support]})
+        return conflicts
 
 
 class ExplainabilityAgent:

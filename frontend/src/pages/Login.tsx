@@ -19,7 +19,7 @@ export const Login = () => {
 
     try {
       await dispatch(login({ username, password })).unwrap();
-      navigate('/dashboard');
+      navigate('/settings');
     } catch (err: any) {
       setError(err.message || 'Login failed');
     } finally {

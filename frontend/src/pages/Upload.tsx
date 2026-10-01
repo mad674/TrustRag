@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { documents } from '../api/client';
+import { Link } from 'react-router-dom';
 
 export default function Upload() {
   const [file, setFile] = useState<File | null>(null);
@@ -11,15 +12,17 @@ export default function Upload() {
 
   const submit = async () => {
     if (!file) return;
+    if (file.size > 25 * 1024 * 1024) {
+      setError('This file is larger than the 25 MB limit. Choose a smaller document.');
+      return;
+    }
     setLoading(true);
     setUploading(true);
     setError('');
     setMessage('');
     try {
       const response = await documents.upload(file);
-      setMessage(
-        `Uploaded ${response.data.title} and indexed ${response.data.indexed_chunks} evidence chunks.`
-      );
+      setMessage(`Uploaded ${response.data.title} and indexed ${response.data.indexed_chunks} evidence chunks.`);
       setFile(null);
     } catch (err: any) {
       setError(err.response?.data?.detail || 'Upload failed');
@@ -53,7 +56,7 @@ export default function Upload() {
             {file && <span className="muted">{file.name}</span>}
           </div>
         </div>
-        {message && <div className="notice success">{message}</div>}
+        {message && <div className="notice success">{message} <Link className="text-link" to="/chat">Open grounded chat</Link></div>}
         {error && <div className="notice error">{error}</div>}
       </section>
 

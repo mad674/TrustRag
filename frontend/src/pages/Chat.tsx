@@ -1,5 +1,6 @@
-import { useState } from 'react';
-import { orchestration } from '../api/client';
+import { useEffect, useState } from 'react';
+import { Link, useSearchParams } from 'react-router-dom';
+import { documents, memory, orchestration } from '../api/client';
 
 interface Message {
   id: string;
@@ -17,7 +18,7 @@ interface Message {
   task?: string;
   llmProvider: string;
   correctionPerformed: boolean;
-  claims: { claim: string; status: string; confidence: number }[];
+  claims: { claim: string; status: string; confidence: number; evidence_ids?: number[] }[];
   rerankingExplanation: string;
   timestamp: Date;
 }
@@ -27,7 +28,46 @@ export const Chat = () => {
   const [messages, setMessages] = useState<Message[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
+  const [availableDocuments, setAvailableDocuments] = useState<any[]>([]);
+  const [selectedDocumentIds, setSelectedDocumentIds] = useState<string[]>([]);
+    const [searchParams] = useSearchParams();
 
+    useEffect(() => {
+      const recordId = searchParams.get('history');
+      if (!recordId) return;
+      memory.record(recordId).then((response) => {
+        const record = response.data;
+        const saved = record.response || {};
+        setMessages([{
+          id: record.id,
+          query: record.query,
+          answer: saved.answer || 'Saved analysis has no answer content.',
+          intent: record.intent,
+          retrievalStrategy: record.strategy,
+          rerankerUsed: Boolean(saved.pipeline_trace?.some((step: any) => step.stage === 'cross_encoder_reranking' && step.detail === 'Applied')),
+          sources: saved.sources || [],
+          confidence: Number(record.confidence || 0),
+          explanations: saved.explanations || [],
+          verification: saved.verification,
+          report: saved.report || '',
+          pipelineTrace: saved.pipeline_trace || [],
+          task: saved.task,
+          llmProvider: saved.llm_provider || 'saved analysis',
+          correctionPerformed: Boolean(saved.correction_performed),
+          claims: saved.claims || [],
+          rerankingExplanation: saved.reranking_explanation || '',
+          timestamp: new Date(record.created_at),
+        }]);
+      }).catch((err: any) => setError(err.response?.data?.detail || 'Could not load saved analysis'));
+    }, [searchParams]);
+
+    useEffect(() => {
+        const documentId = searchParams.get('document');
+        documents.list(undefined, 1, 100).then((response) => {
+          setAvailableDocuments(response.data);
+          if (documentId && response.data.some((doc: any) => doc.id === documentId)) setSelectedDocumentIds([documentId]);
+        }).catch(() => undefined);
+      }, [searchParams]);
   const handleSubmit = async (event: React.FormEvent) => {
     event.preventDefault();
     if (!query.trim()) return;
@@ -36,7 +76,7 @@ export const Chat = () => {
     setError('');
 
     try {
-      const response = await orchestration.query(query, 8);
+      const response = await orchestration.query(query, 8, selectedDocumentIds);
       const message: Message = {
         id: Date.now().toString(),
         query,
@@ -61,7 +101,7 @@ export const Chat = () => {
       setMessages((current) => [message, ...current]);
       setQuery('');
     } catch (err: any) {
-      setError(err.response?.data?.detail || 'Query failed');
+      setError(err.response?.status === 428 ? 'AI analysis is locked. Open Settings and verify a provider or select the local fallback.' : err.response?.data?.detail || 'Query failed');
     } finally {
       setLoading(false);
     }
@@ -91,12 +131,15 @@ export const Chat = () => {
           </button>
         </form>
 
+        {availableDocuments.length > 0 && <div className="field evidence-picker"><span>Evidence scope</span><div className="doc-picker">{availableDocuments.map((doc) => <label className={`picker-item ${selectedDocumentIds.includes(doc.id) ? 'selected' : ''}`} key={doc.id}><input type="checkbox" checked={selectedDocumentIds.includes(doc.id)} onChange={() => setSelectedDocumentIds((current) => current.includes(doc.id) ? current.filter((id) => id !== doc.id) : [...current, doc.id])} /><span><strong>{doc.title}</strong><small>{doc.chunk_count || 0} indexed chunks</small></span></label>)}</div><small className="muted">Leave empty to search your full private library.</small></div>}
+
         {error && <div className="notice error">{error}</div>}
 
         {messages.length === 0 && !loading && (
           <div className="empty-state">
             <h3>No questions yet</h3>
             <p className="muted">Upload documents first, then ask a grounded question here.</p>
+            <Link className="primary link-button" to="/upload">Upload evidence</Link>
           </div>
         )}
 
@@ -131,7 +174,7 @@ export const Chat = () => {
                   <p><strong>Correction search:</strong> {message.correctionPerformed ? 'performed' : 'not required'}</p>
                   <p><strong>Why this ranking:</strong> {message.rerankingExplanation}</p>
                   <div className="claim-list">
-                    {message.claims.map((claim, index) => <div className={`claim claim-${claim.status.toLowerCase()}`} key={`${claim.claim}-${index}`}><strong>{claim.status}</strong><span>{claim.claim}</span><small>{(claim.confidence * 100).toFixed(0)}% claim confidence</small></div>)}
+                    {message.claims.map((claim, index) => <div className={`claim claim-${claim.status.toLowerCase()}`} key={`${claim.claim}-${index}`}><strong>{claim.status}</strong><span>{claim.claim}</span><small>{(claim.confidence * 100).toFixed(0)}% claim confidence{claim.evidence_ids?.length ? ` · evidence ${claim.evidence_ids.map((id) => `[${id}]`).join(', ')}` : ''}</small></div>)}
                   </div>
                 </div>
                 <div className="evidence-panel">
@@ -143,7 +186,11 @@ export const Chat = () => {
                     Confidence: {(message.confidence * 100).toFixed(1)}%
                     {message.verification?.hallucination_risk ? ` | Risk: ${message.verification.hallucination_risk}` : ''}
                     {message.verification?.evidence_score !== undefined ? ` | Evidence: ${(message.verification.evidence_score * 100).toFixed(1)}%` : ''}
+                    {message.verification?.ets !== undefined ? ` | ETS: ${(message.verification.ets * 100).toFixed(1)}%` : ''}
+                    {message.verification?.eif !== undefined ? ` | EIF: ${(message.verification.eif * 100).toFixed(1)}%` : ''}
                   </p>
+                  {message.verification?.citation_completeness !== undefined && <p>Citation completeness: {(message.verification.citation_completeness * 100).toFixed(1)}%</p>}
+                  {message.verification?.conflicts?.length > 0 && <div className="notice error">Conflicting evidence detected. Review the cited passages before relying on this answer.</div>}
                 </div>
                 <div className="evidence-panel">
                   <h3>Pipeline trace</h3>
@@ -171,7 +218,7 @@ export const Chat = () => {
                 <h3>Citations and Supporting Passages</h3>
                 {message.sources.map((source, index) => (
                   <div className="source-row" key={`${source.doc_id}-${source.chunk_index}-${index}`}>
-                    <strong>[{index + 1}] {source.title}</strong>
+                    <strong>[{source.citation_id || index + 1}] {source.title}</strong>
                     <span>
                       Score: {Number(source.relevance_score || 0).toFixed(3)}
                       {' | '}

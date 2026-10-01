@@ -68,6 +68,8 @@ async def orchestrate_query(
         target_docs = []
         if req.document_ids:
             target_docs = db.query(Document).filter(Document.id.in_(req.document_ids), Document.uploaded_by == current_user.id).all()
+            if len(target_docs) != len(set(req.document_ids)):
+                raise HTTPException(status_code=404, detail="One or more selected documents were not found")
         else:
             query_terms = {term for term in re.findall(r"[a-z0-9]+", req.query.lower()) if len(term) > 2 and term not in {"summarize", "summary", "this", "document", "paper", "report", "open"}}
             if query_terms:
@@ -84,7 +86,13 @@ async def orchestrate_query(
                         chunks.append({"doc_id": str(doc.id), "owner_id": str(current_user.id), "title": doc.title, "filename": doc.filename, "chunk_index": index // 1200, "text": text, "score": 1.0, "similarity_score": 1.0, "retrieval_strategy": "document_targeted"})
             pipeline_response = {"mode": "adaptive", "phase": "document_targeted", "intent": "summarization", "strategy": "document_targeted", "retrieval_strategy": "document_targeted", "reranker_used": False, "supporting_chunks": chunks, "reranking_explanation": "Document title/filename matched the user query; all matching chunks were passed to the summary agent."}
         else:
-            pipeline_response = get_pipeline().run(req.query, top_k=req.top_k, mode="adaptive", owner_id=str(current_user.id))
+            pipeline_response = get_pipeline().run(
+                req.query,
+                top_k=req.top_k,
+                mode="adaptive",
+                owner_id=str(current_user.id),
+                document_ids=[str(doc_id) for doc_id in req.document_ids] or None,
+            )
         retrieved_docs = pipeline_response.get("supporting_chunks", [])
         
         # Step 2: Initialize orchestrator with retrieved documents
@@ -112,6 +120,7 @@ async def orchestrate_query(
                 "reranker_used": pipeline_response.get("reranker_used"),
                 "llm_config": user_llm_config,
                 "memory": UserMemoryService().get(db, current_user.id),
+                "document_ids": [str(doc_id) for doc_id in req.document_ids],
             }
         }
         

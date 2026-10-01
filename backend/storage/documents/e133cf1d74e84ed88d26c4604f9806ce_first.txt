@@ -1,0 +1,1 @@
+First document discusses adaptive retrieval and BM25.

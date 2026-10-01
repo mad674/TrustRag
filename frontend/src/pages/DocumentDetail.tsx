@@ -10,6 +10,7 @@ export default function DocumentDetail() {
   const [mode, setMode] = useState<'short' | 'executive' | 'detailed'>('executive');
   const [loading, setLoading] = useState(true);
   const [working, setWorking] = useState(false);
+  const [summaryReady, setSummaryReady] = useState(false);
   const [error, setError] = useState('');
 
   useEffect(() => {
@@ -18,8 +19,8 @@ export default function DocumentDetail() {
 
   const createSummary = async () => {
     setWorking(true);
-    try { setSummary((await documents.summarize(id, mode)).data.summary); }
-    catch (err: any) { setError(err.response?.data?.detail || 'Summary failed'); }
+    try { setSummary((await documents.summarize(id, mode)).data.summary); setSummaryReady(true); }
+    catch (err: any) { setError(err.response?.status === 428 ? 'Configure and verify an AI provider in Settings before generating summaries.' : err.response?.data?.detail || 'Summary failed'); }
     finally { setWorking(false); }
   };
 
@@ -40,7 +41,7 @@ export default function DocumentDetail() {
     {error && <div className="notice error">{error}</div>}
     <section className="detail-grid">
       <article className="panel card"><h3>Metadata</h3><dl className="metadata"><dt>Status</dt><dd>{document.processing_status}</dd><dt>Characters</dt><dd>{document.content?.length?.toLocaleString()}</dd><dt>Uploaded</dt><dd>{document.created_at ? new Date(document.created_at).toLocaleString() : 'Unknown'}</dd></dl><h3>Extracted evidence</h3><pre className="document-text">{document.content}</pre></article>
-      <aside className="panel card"><h3>Grounded summary</h3><div className="summary-controls"><select value={mode} onChange={(event) => setMode(event.target.value as typeof mode)}><option value="short">Short</option><option value="executive">Executive</option><option value="detailed">Detailed</option></select><button className="primary" onClick={createSummary} disabled={working}>{working ? 'Generating...' : 'Generate'}</button></div>{summary ? <p className="answer-text">{summary}</p> : <p className="muted">Generate a summary from this document using the configured AI provider.</p>}</aside>
+      <aside className="panel card"><h3>Grounded summary</h3><div className="summary-controls"><select value={mode} onChange={(event) => setMode(event.target.value as typeof mode)}><option value="short">Short</option><option value="executive">Executive</option><option value="detailed">Detailed</option></select><button className="primary" onClick={createSummary} disabled={working}>{working ? 'Generating...' : 'Generate'}</button></div>{summaryReady ? <p className="answer-text">{summary}</p> : <p className="muted">Generate a summary from this document using the configured AI provider.</p>}<Link className="secondary link-button" to={`/chat?document=${id}`}>Ask a question about this document</Link></aside>
     </section>
   </main>;
 }

@@ -23,7 +23,6 @@ class LLMSettingsRequest(BaseModel):
     base_url: Optional[str] = Field(default=None, max_length=500)
     api_key: Optional[SecretStr] = None
     temperature: float = Field(default=0.0, ge=0.0, le=2.0)
-    max_tokens: int = Field(default=1200, ge=128, le=8000)
 
 
 class LLMSettingsResponse(BaseModel):
@@ -31,10 +30,14 @@ class LLMSettingsResponse(BaseModel):
     model: str
     base_url: Optional[str]
     temperature: float
-    max_tokens: int
     is_verified: bool
     has_api_key: bool
     verified_at: Optional[str]
+
+
+class LLMKeyResponse(BaseModel):
+    has_api_key: bool
+    is_verified: bool
 
 
 def _response(item: UserLLMSettings) -> LLMSettingsResponse:
@@ -43,7 +46,6 @@ def _response(item: UserLLMSettings) -> LLMSettingsResponse:
         model=item.model,
         base_url=item.base_url,
         temperature=item.temperature,
-        max_tokens=item.max_tokens,
         is_verified=item.is_verified,
         has_api_key=bool(item.encrypted_api_key),
         verified_at=item.verified_at.isoformat() if item.verified_at else None,
@@ -91,8 +93,9 @@ def validate_llm_settings(request: LLMSettingsRequest, db: Session = Depends(get
     item.model = request.model
     item.base_url = request.base_url or ("https://api.groq.com/openai/v1" if request.provider == "groq" else None)
     item.temperature = request.temperature
-    item.max_tokens = request.max_tokens
-    if api_key:
+    if request.provider == "fallback":
+        item.encrypted_api_key = None
+    elif api_key:
         item.encrypted_api_key = encrypt_api_key(api_key)
     item.is_verified = verified
     item.verified_at = datetime.datetime.utcnow()
@@ -101,15 +104,25 @@ def validate_llm_settings(request: LLMSettingsRequest, db: Session = Depends(get
     return _response(item)
 
 
+@router.delete("/key", response_model=LLMKeyResponse)
+def revoke_llm_key(db: Session = Depends(get_db), current_user=Depends(get_current_user)):
+    """Revoke the user's stored provider secret without returning its value."""
+    item = get_user_llm_settings(db, current_user.id)
+    item.encrypted_api_key = None
+    item.is_verified = item.provider == "fallback"
+    item.verified_at = datetime.datetime.utcnow() if item.is_verified else None
+    db.commit()
+    return LLMKeyResponse(has_api_key=False, is_verified=item.is_verified)
+
+
 def resolve_user_llm_config(db: Session, user_id) -> dict:
     item = get_user_llm_settings(db, user_id)
-    if not item.is_verified:
-        raise HTTPException(status_code=428, detail="Configure and validate your AI provider before starting a chat")
+    if item.provider != "fallback" and (not item.is_verified or not item.encrypted_api_key):
+        raise HTTPException(status_code=428, detail="Configure and verify an AI provider, or select the local fallback, before using AI analysis")
     return {
         "provider": item.provider,
         "model": item.model,
         "base_url": item.base_url,
         "api_key": decrypt_api_key(item.encrypted_api_key),
         "temperature": item.temperature,
-        "max_tokens": item.max_tokens,
     }

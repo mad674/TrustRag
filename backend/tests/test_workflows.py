@@ -30,6 +30,15 @@ def test_document_workflows(client):
     first_id = first.json()["id"]
     second_id = second.json()["id"]
 
+    targeted_query = client.post(
+        "/api/orchestrate/query",
+        json={"query": "retrieval", "top_k": 5, "document_ids": [first_id]},
+        headers=headers,
+    )
+    assert targeted_query.status_code == 200, targeted_query.text
+    assert targeted_query.json()["supporting_chunks"]
+    assert {chunk["doc_id"] for chunk in targeted_query.json()["supporting_chunks"]} == {first_id}
+
     targeted = client.post(
         "/api/orchestrate/query",
         json={"query": "summary this first document", "top_k": 3},
@@ -67,6 +76,10 @@ def test_document_workflows(client):
 
     history = client.get("/api/memory/history", headers=headers)
     assert history.status_code == 200
+    assert history.json()
+    history_detail = client.get(f"/api/memory/history/{history.json()[0]['id']}", headers=headers)
+    assert history_detail.status_code == 200
+    assert history_detail.json()["response"]["answer"]
 
     deleted = client.delete(f"/api/documents/{first_id}", headers=headers)
     assert deleted.status_code == 200

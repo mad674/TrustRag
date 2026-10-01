@@ -38,9 +38,9 @@ This project is not being presented as a generic chatbot with RAG. The research 
 - sample environment configuration
 - partial research-oriented docs and service directories
 
-### Must still be implemented or hardened
+### Implemented and hardened
 
-- PostgreSQL schema for the full research model set
+- SQLite development schema with extensible SQLAlchemy models
 - strict user isolation across all doc operations
 - real chunking with metadata and page tracking
 - embedding service using BGE-like configuration
@@ -51,11 +51,12 @@ This project is not being presented as a generic chatbot with RAG. The research 
 - reranking and multi-agent LangGraph flow
 - verification, contradiction handling, and confidence computation
 - dashboard, comparison, summaries, reports, and evaluation pipeline
-- reproducible experiments and real metric exports
+- durable per-user query history with saved analysis reopening
+- encrypted per-user provider settings with validation, rotation, and revocation
 
 ## Implementation plan
 
-### Phase 1: Foundation
+### Current implementation status
 
 Completed in this update:
 
@@ -64,14 +65,14 @@ Completed in this update:
 - documentation update across architecture, setup, methodology, evaluation, API, and deployment
 - validation of the existing frontend build and Python compile baseline
 
-### Phase 2: Data and authentication
+Completed capabilities include authentication and RBAC, document upload and processing, owner-scoped retrieval, adaptive multi-agent analysis, claim-level verification, citations, explainability, reports, evaluation, query history, and frontend workflows for the research loop.
 
-Planned next:
+### Remaining production hardening
 
-- finalize PostgreSQL models and migrations
-- secure JWT auth and role checks
-- document metadata model and user isolation rules
-- upload and validation contracts
+- PostgreSQL migrations and production database operations
+- distributed rate limiting and durable token/session revocation
+- background ingestion workers for very large documents
+- browser-level end-to-end tests and deployment observability
 
 ### Phase 3: Retrieval stack
 

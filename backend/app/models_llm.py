@@ -19,7 +19,6 @@ class UserLLMSettings(Base):
     base_url: Mapped[str | None] = mapped_column(String(500), nullable=True)
     encrypted_api_key: Mapped[str | None] = mapped_column(Text, nullable=True)
     temperature: Mapped[float] = mapped_column(Float, default=0.0, nullable=False)
-    max_tokens: Mapped[int] = mapped_column(Integer, default=1200, nullable=False)
     is_verified: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
     verified_at: Mapped[datetime.datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     created_at: Mapped[datetime.datetime] = mapped_column(DateTime(timezone=True), default=datetime.datetime.utcnow)

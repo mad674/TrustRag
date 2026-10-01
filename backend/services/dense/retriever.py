@@ -12,7 +12,7 @@ class DenseRetriever:
     def __init__(self, collection_name: str = "documents"):
         self.collection_name = collection_name
 
-    def retrieve(self, query: str, limit: int = 50, owner_id: Optional[str] = None) -> List[Dict[str, Any]]:
+    def retrieve(self, query: str, limit: int = 50, owner_id: Optional[str] = None, document_ids: Optional[set[str]] = None) -> List[Dict[str, Any]]:
         vector = get_embedding_service().embed_texts([query])[0]
         hits = get_qdrant_client().search(
             collection_name=self.collection_name,
@@ -23,6 +23,8 @@ class DenseRetriever:
         for hit in hits:
             payload = hit.payload or {}
             if owner_id and payload.get("owner_id") != owner_id:
+                continue
+            if document_ids is not None and payload.get("doc_id") not in document_ids:
                 continue
             score = float(hit.score)
             results.append({

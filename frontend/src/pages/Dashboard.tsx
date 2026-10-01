@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { documents } from '../api/client';
+import { documents, llmSettings } from '../api/client';
 import { memory } from '../api/client';
 
 export const Dashboard = () => {
@@ -11,11 +11,13 @@ export const Dashboard = () => {
   const [history, setHistory] = useState<any[]>([]);
   const [page, setPage] = useState(1);
   const [totalDocuments, setTotalDocuments] = useState(0);
+  const [provider, setProvider] = useState<{ name: string; ready: boolean } | null>(null);
   const pageSize = 12;
 
   useEffect(() => {
     loadDocuments(1);
     memory.history().then((response) => setHistory(response.data.slice(0, 4))).catch(() => undefined);
+    llmSettings.get().then((response) => setProvider({ name: response.data.provider, ready: Boolean(response.data.is_verified && (response.data.provider === 'fallback' || response.data.has_api_key)) })).catch(() => setProvider({ name: 'unavailable', ready: false }));
   }, []);
 
   const loadDocuments = async (requestedPage = page) => {
@@ -65,7 +67,16 @@ export const Dashboard = () => {
         </div>
       </section>
 
-      {history.length > 0 && <section className="panel card recent-panel"><div className="section-title"><div><span className="eyebrow">PRIVATE MEMORY</span><h2>Continue your research</h2></div><Link className="secondary link-button" to="/chat">Open chat</Link></div><div className="history-list">{history.map((item) => <Link className="history-item" to="/chat" key={item.id}><span>{item.query}</span><small>{item.strategy || 'adaptive'} · {item.verification_status || 'unverified'}</small></Link>)}</div></section>}
+      <section className="workspace-readiness panel card">
+        <div><span className="eyebrow">WORKSPACE READINESS</span><h2>From source material to a defensible answer</h2><p className="muted">TrustRAG keeps setup, evidence, and analysis visible so you know what is ready before you run a question.</p></div>
+        <div className="readiness-steps">
+          <Link className={`readiness-step ${provider?.ready ? 'ready' : ''}`} to="/settings"><span>01</span><div><strong>Provider</strong><small>{provider ? `${provider.name} · ${provider.ready ? 'ready' : 'needs setup'}` : 'checking...'}</small></div></Link>
+          <Link className={`readiness-step ${totalDocuments > 0 ? 'ready' : ''}`} to="/upload"><span>02</span><div><strong>Evidence corpus</strong><small>{totalDocuments > 0 ? `${totalDocuments} document${totalDocuments === 1 ? '' : 's'} available` : 'Upload your first document'}</small></div></Link>
+          <Link className={`readiness-step ${provider?.ready && totalDocuments > 0 ? 'ready' : ''}`} to="/chat"><span>03</span><div><strong>Analysis</strong><small>{provider?.ready && totalDocuments > 0 ? 'Ready for grounded questions' : 'Complete the first two steps'}</small></div></Link>
+        </div>
+      </section>
+
+      {history.length > 0 && <section className="panel card recent-panel"><div className="section-title"><div><span className="eyebrow">PRIVATE MEMORY</span><h2>Continue your research</h2></div><Link className="secondary link-button" to="/chat">Open chat</Link></div><div className="history-list">{history.map((item) => <Link className="history-item" to={`/chat?history=${item.id}`} key={item.id}><span>{item.query}</span><small>{item.strategy || 'adaptive'} · {item.verification_status || 'unverified'}</small></Link>)}</div></section>}
 
       <section className="panel card">
         <div className="section-title">

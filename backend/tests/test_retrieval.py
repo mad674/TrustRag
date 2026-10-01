@@ -67,6 +67,8 @@ def test_adaptive_retrieval_is_authenticated_and_owner_scoped(client):
     assert orchestration_body["llm_provider"] == "fallback:validated"
     assert orchestration_body["verification"] is not None
     assert "claims" in orchestration_body["verification"]
+    assert "citation_completeness" in orchestration_body["verification"]
+    assert "conflicts" in orchestration_body["verification"]
     assert orchestration_body["report"]
 
     summary_query = client.post(
